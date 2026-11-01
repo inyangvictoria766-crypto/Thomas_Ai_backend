@@ -98,10 +98,9 @@ def database_check():
         }
 
     except Exception as error:
-    print("DATABASE ERROR:", repr(error), flush=True)
+        print("DATABASE ERROR:", repr(error), flush=True)
 
-    raise HTTPException(
-        status_code=500,
-        detail="Database connection failed."
-    )
+        raise HTTPException(
+            status_code=500,
+            detail="Database connection failed."
         )
