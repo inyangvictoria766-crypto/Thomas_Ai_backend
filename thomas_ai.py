@@ -31,3 +31,39 @@ def generate_image(request: ImageRequest):
         "prompt": prompt,
         "status": "success"
     }
+
+
+from fastapi import UploadFile, File, Form
+
+@app.post("/upload-image")
+async def upload_image(
+    prompt: str = Form(...),
+    image: UploadFile = File(...)
+):
+    if not image.content_type or not image.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload a valid image."
+        )
+
+    image_data = await image.read()
+
+    if not image_data:
+        raise HTTPException(
+            status_code=400,
+            detail="The uploaded image is empty."
+        )
+
+    if len(image_data) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail="Image must be 10 MB or smaller."
+        )
+
+    return {
+        "message": "Image received successfully!",
+        "filename": image.filename,
+        "image_size": len(image_data),
+        "prompt": prompt,
+        "status": "success"
+    }
