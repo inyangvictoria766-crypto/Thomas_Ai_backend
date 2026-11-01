@@ -67,3 +67,38 @@ async def upload_image(
         "prompt": prompt,
         "status": "success"
     }
+import os
+import psycopg2
+
+
+@app.get("/db-check")
+def database_check():
+    database_url = os.getenv("DATABASE_URL")
+
+    if not database_url:
+        raise HTTPException(
+            status_code=500,
+            detail="DATABASE_URL is missing."
+        )
+
+    try:
+        connection = psycopg2.connect(database_url)
+        cursor = connection.cursor()
+
+        cursor.execute("SELECT version();")
+        result = cursor.fetchone()
+
+        cursor.close()
+        connection.close()
+
+        return {
+            "status": "success",
+            "message": "Thomas AI is connected to PostgreSQL!",
+            "database": result[0]
+        }
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Database connection failed."
+        )
