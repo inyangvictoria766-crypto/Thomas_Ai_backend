@@ -54,10 +54,15 @@ def generate_image(request: ImageRequest):
         response.raise_for_status()
         return response.json()
 
-    except requests.RequestException:
+        except requests.RequestException as error:
+        print("STUDIOLM ERROR:", repr(error), flush=True)
+
+        if error.response is not None:
+            print("STUDIOLM RESPONSE:", error.response.text, flush=True)
+
         raise HTTPException(
             status_code=502,
-            detail="Image generation service failed."
+            detail="Image generation service failed. Check Render logs."
         )
 
 from fastapi import UploadFile, File, Form
