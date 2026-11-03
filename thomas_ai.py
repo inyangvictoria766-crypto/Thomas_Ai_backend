@@ -85,8 +85,39 @@ def generate_image(request: ImageRequest):
             status_code=502,
             detail="Image generation service failed. Check Render logs."
         )
+        
 
+@app.get("/studiolm-check")
+def studiolm_check():
+    api_key = os.getenv("STUDIOLM_API_KEY")
 
+    if not api_key:
+        return {"status": "error", "message": "API key missing"}
+
+    try:
+        response = requests.get(
+            "https://api.studiolm.dev/v1/models",
+            headers={
+                "Authorization": f"Bearer {api_key}"
+            },
+            timeout=30
+        )
+
+        return {
+            "http_status": response.status_code,
+            "authenticated": response.status_code == 200,
+            "response": response.json()
+            if response.status_code == 200
+            else "Authentication or API request failed"
+        }
+
+    except requests.RequestException as error:
+        print("MODEL CHECK ERROR:", repr(error), flush=True)
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not reach StudioLM."
+            )
 # IMAGE UPLOAD
 
 @app.post("/upload-image")
