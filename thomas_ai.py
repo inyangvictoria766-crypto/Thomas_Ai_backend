@@ -40,6 +40,8 @@ def generate_image(request: ImageRequest):
         )
 
     api_key = os.getenv("STUDIOLM_API_KEY")
+    print("API KEY LOADED:", bool(api_key), flush=True)
+    print("API KEY LENGTH:", len(api_key) if api_key else 0, flush=True)
 
     if not api_key:
         raise HTTPException(
