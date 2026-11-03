@@ -16,6 +16,9 @@ def home():
     }
 
 
+import os
+import requests
+
 @app.post("/generate")
 def generate_image(request: ImageRequest):
     prompt = request.prompt.strip()
@@ -26,12 +29,35 @@ def generate_image(request: ImageRequest):
             detail="Prompt cannot be empty."
         )
 
-    return {
-        "message": "Prompt received successfully!",
-        "prompt": prompt,
-        "status": "success"
-    }
+    api_key = os.getenv("STUDIOLM_API_KEY")
 
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Image generation API key is missing."
+        )
+
+    try:
+        response = requests.post(
+            "https://api.studiolm.dev/v1/images/generations",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "prompt": prompt
+            },
+            timeout=120
+        )
+
+        response.raise_for_status()
+        return response.json()
+
+    except requests.RequestException:
+        raise HTTPException(
+            status_code=502,
+            detail="Image generation service failed."
+        )
 
 from fastapi import UploadFile, File, Form
 
