@@ -1,13 +1,22 @@
+
+import os
 import requests
-from fastapi import FastAPI, HTTPException
+import psycopg2
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
+
 
 app = FastAPI(title="Thomas AI Backend")
 
 
+# IMAGE REQUEST MODEL
+
 class ImageRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=1000)
 
+
+# HOME ROUTE
 
 @app.get("/")
 def home():
@@ -17,11 +26,11 @@ def home():
     }
 
 
-import os
-import requests
+# IMAGE GENERATION
 
 @app.post("/generate")
 def generate_image(request: ImageRequest):
+
     prompt = request.prompt.strip()
 
     if not prompt:
@@ -52,26 +61,38 @@ def generate_image(request: ImageRequest):
         )
 
         response.raise_for_status()
+
         return response.json()
 
-        except requests.RequestException as error:
-        print("STUDIOLM ERROR:", repr(error), flush=True)
+    except requests.RequestException as error:
+
+        print(
+            "STUDIOLM ERROR:",
+            repr(error),
+            flush=True
+        )
 
         if error.response is not None:
-            print("STUDIOLM RESPONSE:", error.response.text, flush=True)
+            print(
+                "STUDIOLM RESPONSE:",
+                error.response.text,
+                flush=True
+            )
 
         raise HTTPException(
             status_code=502,
             detail="Image generation service failed. Check Render logs."
         )
 
-from fastapi import UploadFile, File, Form
+
+# IMAGE UPLOAD
 
 @app.post("/upload-image")
 async def upload_image(
     prompt: str = Form(...),
     image: UploadFile = File(...)
 ):
+
     if not image.content_type or not image.content_type.startswith("image/"):
         raise HTTPException(
             status_code=400,
@@ -99,12 +120,13 @@ async def upload_image(
         "prompt": prompt,
         "status": "success"
     }
-import os
-import psycopg2
 
+
+# DATABASE CONNECTION CHECK
 
 @app.get("/db-check")
 def database_check():
+
     database_url = os.getenv("DATABASE_URL")
 
     if not database_url:
@@ -115,9 +137,11 @@ def database_check():
 
     try:
         connection = psycopg2.connect(database_url)
+
         cursor = connection.cursor()
 
         cursor.execute("SELECT version();")
+
         result = cursor.fetchone()
 
         cursor.close()
@@ -130,9 +154,15 @@ def database_check():
         }
 
     except Exception as error:
-        print("DATABASE ERROR:", repr(error), flush=True)
+
+        print(
+            "DATABASE ERROR:",
+            repr(error),
+            flush=True
+        )
 
         raise HTTPException(
             status_code=500,
             detail="Database connection failed."
-        )
+    )
+        
