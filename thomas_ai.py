@@ -199,12 +199,18 @@ async def upload_image(
         image_buffer.seek(0)
 
         # Send image and prompt to Cloudflare
+        models = {
+    "low": "@cf/black-forest-labs/flux-2-klein-4b",
+    "medium": "REPLACE_WITH_MEDIUM_MODEL",
+    "high": "REPLACE_WITH_HIGH_MODEL"
+}
+
+        model = models[quality]
+
         url = (
             f"https://api.cloudflare.com/client/v4/accounts/"
-            f"{account_id}/ai/run/"
-            f"@cf/black-forest-labs/flux-2-klein-4b"
-        )
-
+            f"{account_id}/ai/run/{model}"
+)
         response = requests.post(
             url,
             headers={
