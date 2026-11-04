@@ -204,13 +204,14 @@ async def upload_image(
     "medium": "@cf/black-forest-labs/flux-2-klein-9b",
     "high": "NOT_CONFIGURED_YET"
 }
-
-        model = models[quality]
         if quality == "high":
             raise HTTPException(
                 status_code=501,
                 detail="High quality generation is not available yet."
-    )
+            )
+
+        model = models[quality]
+        
 
         url = (
             f"https://api.cloudflare.com/client/v4/accounts/"
