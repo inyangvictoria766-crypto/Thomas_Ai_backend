@@ -4,7 +4,7 @@ import io
 import requests
 import psycopg2
 
-
+from PIL import Image
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
 
