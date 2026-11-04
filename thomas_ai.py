@@ -206,6 +206,11 @@ async def upload_image(
 }
 
         model = models[quality]
+        if quality == "high":
+            raise HTTPException(
+                status_code=501,
+                detail="High quality generation is not available yet."
+    )
 
         url = (
             f"https://api.cloudflare.com/client/v4/accounts/"
