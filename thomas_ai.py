@@ -26,6 +26,7 @@ def home():
     }
 
 
+
 # IMAGE GENERATION
 
 @app.post("/generate")
@@ -39,53 +40,59 @@ def generate_image(request: ImageRequest):
             detail="Prompt cannot be empty."
         )
 
-    api_key = os.getenv("STUDIOLM_API_KEY")
-    print("API KEY LOADED:", bool(api_key), flush=True)
-    print("API KEY LENGTH:", len(api_key) if api_key else 0, flush=True)
+    api_token = os.getenv("CLOUDFLARE_API_TOKEN")
+    account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
 
-    if not api_key:
+    if not api_token or not account_id:
         raise HTTPException(
             status_code=500,
-            detail="Image generation API key is missing."
+            detail="Cloudflare credentials are missing."
         )
 
     try:
         response = requests.post(
-            "https://api.studiolm.dev/v1/images/generations",
+            f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/black-forest-labs/flux-1-schnell",
             headers={
-                "Authorization": f"Bearer {api_key}",
+                "Authorization": f"Bearer {api_token}",
                 "Content-Type": "application/json"
             },
             json={
                 "prompt": prompt
             },
-            timeout=120
+            timeout=150
         )
 
         response.raise_for_status()
 
-        return response.json()
+        result = response.json()
+
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=502,
+                detail=str(result.get("errors", "Image generation failed"))
+            )
+
+        image_data = result["result"]["image"]
+
+        return {
+            "image": image_data
+        }
 
     except requests.RequestException as error:
 
-        print(
-            "STUDIOLM ERROR:",
-            repr(error),
-            flush=True
-        )
+        print("CLOUDFLARE ERROR:", repr(error), flush=True)
 
         if error.response is not None:
             print(
-                "STUDIOLM RESPONSE:",
+                "CLOUDFLARE RESPONSE:",
                 error.response.text,
                 flush=True
             )
 
         raise HTTPException(
             status_code=502,
-            detail="Image generation service failed. Check Render logs."
+            detail="Cloudflare image generation failed."
         )
-        
 
 @app.get("/studiolm-check")
 def studiolm_check():
