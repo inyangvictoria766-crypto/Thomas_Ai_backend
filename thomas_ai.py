@@ -201,8 +201,8 @@ async def upload_image(
         # Send image and prompt to Cloudflare
         models = {
     "low": "@cf/black-forest-labs/flux-2-klein-4b",
-    "medium": "REPLACE_WITH_MEDIUM_MODEL",
-    "high": "REPLACE_WITH_HIGH_MODEL"
+    "medium": "@cf/black-forest-labs/flux-2-klein-9b",
+    "high": "NOT_CONFIGURED_YET"
 }
 
         model = models[quality]
