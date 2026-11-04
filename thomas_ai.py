@@ -1,7 +1,9 @@
 
 import os
+import io
 import requests
 import psycopg2
+
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
