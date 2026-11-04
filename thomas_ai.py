@@ -138,6 +138,14 @@ async def upload_image(
     image: UploadFile = File(...)
 ):
     prompt = prompt.strip()
+    quality = quality.lower().strip()
+
+    if quality not in ["low", "medium", "high"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Quality must be low, medium, or high."
+    )
+    
 
     if not prompt:
         raise HTTPException(
