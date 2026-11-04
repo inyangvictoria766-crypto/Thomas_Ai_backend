@@ -199,11 +199,12 @@ async def upload_image(
         image_buffer.seek(0)
 
         # Send image and prompt to Cloudflare
-        models = {
-    "low": "@cf/black-forest-labs/flux-2-klein-4b",
-    "medium": "@cf/black-forest-labs/flux-2-klein-9b",
-    "high": "NOT_CONFIGURED_YET"
-}
+                models = {
+            "low": "@cf/black-forest-labs/flux-2-klein-4b",
+            "medium": "@cf/black-forest-labs/flux-2-klein-9b",
+            "high": "NOT_CONFIGURED_YET"
+        }
+
         if quality == "high":
             raise HTTPException(
                 status_code=501,
@@ -211,12 +212,11 @@ async def upload_image(
             )
 
         model = models[quality]
-        
 
         url = (
             f"https://api.cloudflare.com/client/v4/accounts/"
             f"{account_id}/ai/run/{model}"
-)
+        )
         response = requests.post(
             url,
             headers={
