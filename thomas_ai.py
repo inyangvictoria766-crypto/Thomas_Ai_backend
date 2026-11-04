@@ -134,9 +134,9 @@ def studiolm_check():
 @app.post("/upload-image")
 async def upload_image(
     prompt: str = Form(...),
+    quality: str = Form("low"),
     image: UploadFile = File(...)
 ):
-
     prompt = prompt.strip()
 
     if not prompt:
