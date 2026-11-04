@@ -127,13 +127,23 @@ def studiolm_check():
             status_code=502,
             detail="Could not reach StudioLM."
             )
-# IMAGE UPLOAD
+
+
+# IMAGE UPLOAD AND AI EDITING
 
 @app.post("/upload-image")
 async def upload_image(
     prompt: str = Form(...),
     image: UploadFile = File(...)
 ):
+
+    prompt = prompt.strip()
+
+    if not prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="Please enter an editing prompt."
+        )
 
     if not image.content_type or not image.content_type.startswith("image/"):
         raise HTTPException(
@@ -155,13 +165,89 @@ async def upload_image(
             detail="Image must be 10 MB or smaller."
         )
 
-    return {
-        "message": "Image received successfully!",
-        "filename": image.filename,
-        "image_size": len(image_data),
-        "prompt": prompt,
-        "status": "success"
-    }
+    api_token = os.getenv("CLOUDFLARE_API_TOKEN")
+    account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+
+    if not api_token or not account_id:
+        raise HTTPException(
+            status_code=500,
+            detail="Cloudflare credentials are missing."
+        )
+
+    try:
+        # Resize uploaded image
+        original = Image.open(io.BytesIO(image_data))
+        original = original.convert("RGB")
+        original.thumbnail((511, 511))
+
+        image_buffer = io.BytesIO()
+
+        original.save(
+            image_buffer,
+            format="JPEG",
+            quality=85
+        )
+
+        image_buffer.seek(0)
+
+        # Send image and prompt to Cloudflare
+        url = (
+            f"https://api.cloudflare.com/client/v4/accounts/"
+            f"{account_id}/ai/run/"
+            f"@cf/black-forest-labs/flux-2-klein-4b"
+        )
+
+        response = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {api_token}"
+            },
+            data={
+                "prompt": prompt,
+                "width": 1024,
+                "height": 1024
+            },
+            files={
+                "input_image_0": (
+                    "uploaded.jpg",
+                    image_buffer.getvalue(),
+                    "image/jpeg"
+                )
+            },
+            timeout=180
+        )
+
+        response.raise_for_status()
+
+        result = response.json()
+
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=502,
+                detail=str(result.get("errors", "Image editing failed."))
+            )
+
+        return {
+            "image": result["result"]["image"],
+            "status": "success",
+            "message": "Image edited successfully!"
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "IMAGE EDITING ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not edit the uploaded image."
+        )
+        
 
 
 # DATABASE CONNECTION CHECK
@@ -191,8 +277,7 @@ def database_check():
 
         return {
             "status": "success",
-            "message": "Thomas AI is connected to PostgreSQL!",
-            "database": result[0]
+
         }
 
     except Exception as error:
