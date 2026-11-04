@@ -3,6 +3,7 @@ import os
 import io
 import requests
 import psycopg2
+import base64
 
 from PIL import Image
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
@@ -184,19 +185,86 @@ async def upload_image(
 
     try:
         # Resize uploaded image
+                
         original = Image.open(io.BytesIO(image_data))
         original = original.convert("RGB")
-        original.thumbnail((511, 511))
+        original.thumbnail((512, 512))
+
+        width = max(256, (original.width // 8) * 8)
+        height = max(256, (original.height // 8) * 8)
+
+        original = original.resize((width, height))
 
         image_buffer = io.BytesIO()
+        original.save(image_buffer, format="JPEG", quality=90)
 
-        original.save(
-            image_buffer,
-            format="JPEG",
-            quality=85
+        image_b64 = base64.b64encode(
+            image_buffer.getvalue()
+        ).decode("utf-8")
+
+        # Stable Diffusion image-to-image
+        model = "@cf/runwayml/stable-diffusion-v1-5-img2img"
+
+        num_steps = 10 if quality == "low" else 20
+
+        url = (
+            f"https://api.cloudflare.com/client/v4/accounts/"
+            f"{account_id}/ai/run/{model}"
         )
 
-        image_buffer.seek(0)
+        response = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {api_token}"
+            },
+            json={
+                "prompt": prompt,
+                "image_b64": image_b64,
+                "width": width,
+                "height": height,
+                "num_steps": num_steps,
+                "strength": 0.65,
+                "guidance": 7.5
+            },
+            timeout=180
+        )
+
+        response.raise_for_status()
+
+        # Handle the returned image
+        if response.headers.get("content-type", "").startswith("image/"):
+            generated_image = base64.b64encode(
+                response.content
+            ).decode("utf-8")
+        else:
+            result = response.json()
+
+            if not result.get("success"):
+                raise HTTPException(
+                    status_code=502,
+                    detail=str(result.get("errors", "Image editing failed."))
+                )
+
+            output = result.get("result")
+
+            if isinstance(output, dict):
+                generated_image = output.get("image")
+            elif isinstance(output, str):
+                generated_image = output
+            else:
+                generated_image = None
+
+        if not generated_image:
+            raise HTTPException(
+                status_code=502,
+                detail="The model returned no image."
+            )
+
+        return {
+            "image": generated_image,
+            "status": "success",
+            "message": "Image edited successfully!"
+        }
 
         # Send image and prompt to Cloudflare
                 
