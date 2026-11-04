@@ -4,3 +4,4 @@ python-multipart
 psycopg2-binary
 studiolm
 requests
+Pillow
