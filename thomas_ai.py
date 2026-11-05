@@ -183,52 +183,56 @@ async def upload_image(
             detail="Cloudflare credentials are missing."
         )
 
-    try:
-        # Resize uploaded image
-                
-        original = Image.open(io.BytesIO(image_data))
-        original = original.convert("RGB")
-        original.thumbnail((512, 512))
+        try:
+            j
+            # Resize uploaded image
+            original = Image.open(io.BytesIO(image_data))
+            original = original.convert("RGB")
+            original.thumbnail((511, 511))
 
-        width = max(256, (original.width // 8) * 8)
-        height = max(256, (original.height // 8) * 8)
+            width = max(256, (original.width // 8) * 8)
+            height = max(256, (original.height // 8) * 8)
 
-        original = original.resize((width, height))
+            original = original.resize((width, height))
 
-        image_buffer = io.BytesIO()
-        original.save(image_buffer, format="JPEG", quality=90)
+            image_buffer = io.BytesIO()
+            original.save(image_buffer, format="JPEG", quality=90)
 
-        image_b64 = base64.b64encode(
-            image_buffer.getvalue()
-        ).decode("utf-8")
+            # FLUX is currently configured for LOW quality only
+            if quality != "low":
+                raise HTTPException(
+                status_code=501,
+                detail="This quality option is not configured yet."
+            )
 
-        # Stable Diffusion image-to-image
-        model = "@cf/runwayml/stable-diffusion-v1-5-img2img"
+            model = "@cf/black-forest-labs/flux-2-klein-4b"
 
-        num_steps = 10 if quality == "low" else 20
-
-        url = (
+            url = (
             f"https://api.cloudflare.com/client/v4/accounts/"
             f"{account_id}/ai/run/{model}"
         )
 
-        response = requests.post(
-            url,
-            headers={
+            response = requests.post(
+                url,
+                headers={
                 "Authorization": f"Bearer {api_token}"
             },
-            json={
+                data={
                 "prompt": prompt,
-                "image_b64": image_b64,
                 "width": width,
-                "height": height,
-                "num_steps": num_steps,
-                "strength": 0.65,
-                "guidance": 7.5
+                "height": height
             },
-            timeout=180
+                files={
+                "input_image_0": (
+                    "uploaded.jpg",
+                    image_buffer.getvalue(),
+                    "image/jpeg"
+                )
+            },
+                timeout=180
         )
 
+    
         response.raise_for_status()
 
         # Handle the returned image
