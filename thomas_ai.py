@@ -232,7 +232,7 @@ async def upload_image(
                 timeout=180
         )
         
-                response.raise_for_status()
+            response.raise_for_status()
 
         # Handle the returned image
         if response.headers.get("content-type", "").startswith("image/"):
