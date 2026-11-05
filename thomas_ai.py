@@ -183,56 +183,55 @@ async def upload_image(
             detail="Cloudflare credentials are missing."
         )
 
-        try:
-            j
-            # Resize uploaded image
-            original = Image.open(io.BytesIO(image_data))
-            original = original.convert("RGB")
-            original.thumbnail((511, 511))
+            try:
+        # Resize uploaded image
+        original = Image.open(io.BytesIO(image_data))
+        original = original.convert("RGB")
+        original.thumbnail((511, 511))
 
-            width = max(256, (original.width // 8) * 8)
-            height = max(256, (original.height // 8) * 8)
+        width = max(256, (original.width // 8) * 8)
+        height = max(256, (original.height // 8) * 8)
 
-            original = original.resize((width, height))
+        original = original.resize((width, height))
 
-            image_buffer = io.BytesIO()
-            original.save(image_buffer, format="JPEG", quality=90)
+        image_buffer = io.BytesIO()
+        original.save(image_buffer, format="JPEG", quality=90)
 
-            # FLUX is currently configured for LOW quality only
-            if quality != "low":
-                raise HTTPException(
+        # LOW quality uses FLUX
+        if quality != "low":
+            raise HTTPException(
                 status_code=501,
                 detail="This quality option is not configured yet."
             )
 
-            model = "@cf/black-forest-labs/flux-2-klein-4b"
+        model = "@cf/black-forest-labs/flux-2-klein-4b"
 
-            url = (
+        url = (
             f"https://api.cloudflare.com/client/v4/accounts/"
             f"{account_id}/ai/run/{model}"
         )
 
-            response = requests.post(
-                url,
-                headers={
+        response = requests.post(
+            url,
+            headers={
                 "Authorization": f"Bearer {api_token}"
             },
-                data={
+            data={
                 "prompt": prompt,
                 "width": width,
                 "height": height
             },
-                files={
+            files={
                 "input_image_0": (
                     "uploaded.jpg",
                     image_buffer.getvalue(),
                     "image/jpeg"
                 )
             },
-                timeout=180
+            timeout=180
         )
-        
-            response.raise_for_status()
+
+        response.raise_for_status()
 
         # Handle the returned image
         if response.headers.get("content-type", "").startswith("image/"):
