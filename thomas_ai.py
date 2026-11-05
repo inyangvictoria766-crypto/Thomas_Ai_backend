@@ -183,7 +183,7 @@ async def upload_image(
             detail="Cloudflare credentials are missing."
         )
 
-            try:
+    try:
         # Resize uploaded image
         original = Image.open(io.BytesIO(image_data))
         original = original.convert("RGB")
