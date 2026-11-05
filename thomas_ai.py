@@ -233,7 +233,9 @@ async def upload_image(
 
         response.raise_for_status()
 
-        # Handle the returned image
+    
+
+         # Handle the returned image
         if response.headers.get("content-type", "").startswith("image/"):
             generated_image = base64.b64encode(
                 response.content
@@ -268,61 +270,7 @@ async def upload_image(
             "message": "Image edited successfully!"
         }
 
-        # Send image and prompt to Cloudflare
-                
-        models = {
-            "low": "@cf/black-forest-labs/flux-2-klein-4b",
-            "medium": "@cf/black-forest-labs/flux-2-klein-9b",
-            "high": "NOT_CONFIGURED_YET"
-        }
-
-        if quality == "high":
-            raise HTTPException(
-                status_code=501,
-                detail="High quality generation is not available yet."
-            )
-
-        model = models[quality]
-
-        url = (
-            f"https://api.cloudflare.com/client/v4/accounts/"
-            f"{account_id}/ai/run/{model}"
-        )
-        response = requests.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {api_token}"
-            },
-            data={
-                "prompt": prompt,
-                "width": 1024,
-                "height": 1024
-            },
-            files={
-                "input_image_0": (
-                    "uploaded.jpg",
-                    image_buffer.getvalue(),
-                    "image/jpeg"
-                )
-            },
-            timeout=180
-        )
-
-        response.raise_for_status()
-
-        result = response.json()
-
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=502,
-                detail=str(result.get("errors", "Image editing failed."))
-            )
-
-        return {
-            "image": result["result"]["image"],
-            "status": "success",
-            "message": "Image edited successfully!"
-        }
+        
 
     except HTTPException:
         raise
