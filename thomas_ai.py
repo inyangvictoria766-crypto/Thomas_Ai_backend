@@ -18,7 +18,7 @@ app = FastAPI(title="Thomas AI Backend")
 
 class ImageRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=1000)
-
+    quality: str = "low"
 
 # HOME ROUTE
 
@@ -33,16 +33,84 @@ def home():
 
 # IMAGE GENERATION
 
+
 @app.post("/generate")
 def generate_image(request: ImageRequest):
 
     prompt = request.prompt.strip()
+    quality = request.quality.lower().strip()
 
     if not prompt:
         raise HTTPException(
             status_code=400,
             detail="Prompt cannot be empty."
         )
+
+    if quality not in ["low", "medium", "high"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image quality."
+        )
+
+    # HIGH QUALITY: OPENAI
+    if quality == "high":
+
+        api_key = os.getenv("OPENAI_API_KEY")
+
+        if not api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="OpenAI API key is missing."
+            )
+
+        try:
+            client = OpenAI(
+                api_key=api_key,
+                timeout=180.0,
+                max_retries=1
+            )
+
+            response = client.images.generate(
+                model="gpt-image-2.5-flare",
+                prompt=prompt,
+                quality="high",
+                size="1024x1024",
+                output_format="png",
+                n=1
+            )
+
+            image_data = response.data[0].b64_json
+
+            if not image_data:
+                raise HTTPException(
+                    status_code=502,
+                    detail="OpenAI returned no image."
+                )
+
+            return {
+                "image": image_data,
+                "provider": "openai",
+                "quality": "high",
+                "status": "success"
+            }
+
+        except HTTPException:
+            raise
+
+        except Exception as error:
+
+            print(
+                "OPENAI IMAGE ERROR:",
+                repr(error),
+                flush=True
+            )
+
+            raise HTTPException(
+                status_code=502,
+                detail="OpenAI image generation failed."
+            )
+
+    # LOW AND MEDIUM: CLOUDFLARE
 
     api_token = os.getenv("CLOUDFLARE_API_TOKEN")
     account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
@@ -73,30 +141,34 @@ def generate_image(request: ImageRequest):
         if not result.get("success"):
             raise HTTPException(
                 status_code=502,
-                detail=str(result.get("errors", "Image generation failed"))
+                detail="Cloudflare image generation failed."
             )
 
         image_data = result["result"]["image"]
 
         return {
-            "image": image_data
+            "image": image_data,
+            "provider": "cloudflare",
+            "quality": quality,
+            "status": "success"
         }
+
+    except HTTPException:
+        raise
 
     except requests.RequestException as error:
 
-        print("CLOUDFLARE ERROR:", repr(error), flush=True)
-
-        if error.response is not None:
-            print(
-                "CLOUDFLARE RESPONSE:",
-                error.response.text,
-                flush=True
-            )
+        print(
+            "CLOUDFLARE ERROR:",
+            repr(error),
+            flush=True
+        )
 
         raise HTTPException(
             status_code=502,
             detail="Cloudflare image generation failed."
         )
+            
 
 @app.get("/studiolm-check")
 def studiolm_check():
