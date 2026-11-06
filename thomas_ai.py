@@ -154,6 +154,12 @@ def generate_image(request: ImageRequest):
             )
 
         image_data = result["result"]["image"]
+        total_seconds = time.perf_counter() - request_started
+
+        print(
+            f"TOTAL BACKEND TIME: {total_seconds:.2f} seconds",
+            flush=True
+        )
 
         return {
             "image": image_data,
