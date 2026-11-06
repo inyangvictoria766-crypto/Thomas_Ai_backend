@@ -5,3 +5,4 @@ psycopg2-binary
 studiolm
 requests
 Pillow
+openai
