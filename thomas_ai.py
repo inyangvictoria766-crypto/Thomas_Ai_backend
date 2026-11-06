@@ -4,6 +4,7 @@ import io
 import requests
 import psycopg2
 import base64
+import time
 
 from openai import OpenAI
 from PIL import Image
