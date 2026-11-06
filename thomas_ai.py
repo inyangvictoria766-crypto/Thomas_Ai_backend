@@ -205,6 +205,7 @@ def studiolm_check():
 
 # IMAGE UPLOAD AND AI EDITING
 
+
 @app.post("/upload-image")
 async def upload_image(
     prompt: str = Form(...),
@@ -218,8 +219,7 @@ async def upload_image(
         raise HTTPException(
             status_code=400,
             detail="Quality must be low, medium, or high."
-    )
-    
+        )
 
     if not prompt:
         raise HTTPException(
@@ -247,89 +247,128 @@ async def upload_image(
             detail="Image must be 10 MB or smaller."
         )
 
-    api_token = os.getenv("CLOUDFLARE_API_TOKEN")
-    account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
-
-    if not api_token or not account_id:
-        raise HTTPException(
-            status_code=500,
-            detail="Cloudflare credentials are missing."
-        )
-
     try:
-        # Resize uploaded image
         original = Image.open(io.BytesIO(image_data))
         original = original.convert("RGB")
-        original.thumbnail((511, 511))
 
-        width = max(256, (original.width // 8) * 8)
-        height = max(256, (original.height // 8) * 8)
+        # HIGH QUALITY: OpenAI image editing
+        if quality == "high":
 
-        original = original.resize((width, height))
+            openai_key = os.getenv("OPENAI_API_KEY")
 
-        image_buffer = io.BytesIO()
-        original.save(image_buffer, format="JPEG", quality=90)
+            if not openai_key:
+                raise HTTPException(
+                    status_code=500,
+                    detail="OpenAI API key is missing."
+                )
 
-        # LOW quality uses FLUX
-        if quality != "low":
-            raise HTTPException(
-                status_code=501,
-                detail="This quality option is not configured yet."
+            openai_buffer = io.BytesIO()
+            original.save(
+                openai_buffer,
+                format="JPEG",
+                quality=95
+            )
+            openai_buffer.seek(0)
+
+            client = OpenAI(api_key=openai_key)
+
+            result = client.images.edit(
+                model="gpt-image-2.5-sunburst",
+                image=(
+                    "uploaded.jpg",
+                    openai_buffer,
+                    "image/jpeg"
+                ),
+                prompt=prompt,
+                quality="high"
             )
 
-        model = "@cf/black-forest-labs/flux-2-klein-4b"
-
-        url = (
-            f"https://api.cloudflare.com/client/v4/accounts/"
-            f"{account_id}/ai/run/{model}"
-        )
-
-        response = requests.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {api_token}"
-            },
-            data={
-                "prompt": prompt,
-                "width": width,
-                "height": height
-            },
-            files={
-                "input_image_0": (
-                    "uploaded.jpg",
-                    image_buffer.getvalue(),
-                    "image/jpeg"
-                )
-            },
-            timeout=180
-        )
-
-        response.raise_for_status()
-
-    
-
-         # Handle the returned image
-        if response.headers.get("content-type", "").startswith("image/"):
-            generated_image = base64.b64encode(
-                response.content
-            ).decode("utf-8")
-        else:
-            result = response.json()
-
-            if not result.get("success"):
+            if not result.data or not result.data[0].b64_json:
                 raise HTTPException(
                     status_code=502,
-                    detail=str(result.get("errors", "Image editing failed."))
+                    detail="OpenAI returned no edited image."
                 )
 
-            output = result.get("result")
+            generated_image = result.data[0].b64_json
 
-            if isinstance(output, dict):
-                generated_image = output.get("image")
-            elif isinstance(output, str):
-                generated_image = output
+        else:
+            # LOW and MEDIUM: Existing Cloudflare editing
+            api_token = os.getenv("CLOUDFLARE_API_TOKEN")
+            account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+
+            if not api_token or not account_id:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Cloudflare credentials are missing."
+                )
+
+            original.thumbnail((511, 511))
+
+            width = max(256, (original.width // 8) * 8)
+            height = max(256, (original.height // 8) * 8)
+
+            original = original.resize((width, height))
+
+            image_buffer = io.BytesIO()
+            original.save(
+                image_buffer,
+                format="JPEG",
+                quality=90
+            )
+
+            model = "@cf/black-forest-labs/flux-2-klein-4b"
+
+            url = (
+                f"https://api.cloudflare.com/client/v4/accounts/"
+                f"{account_id}/ai/run/{model}"
+            )
+
+            response = requests.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {api_token}"
+                },
+                data={
+                    "prompt": prompt,
+                    "width": width,
+                    "height": height
+                },
+                files={
+                    "input_image_0": (
+                        "uploaded.jpg",
+                        image_buffer.getvalue(),
+                        "image/jpeg"
+                    )
+                },
+                timeout=180
+            )
+
+            response.raise_for_status()
+
+            if response.headers.get("content-type", "").startswith("image/"):
+                generated_image = base64.b64encode(
+                    response.content
+                ).decode("utf-8")
+
             else:
-                generated_image = None
+                result = response.json()
+
+                if not result.get("success"):
+                    raise HTTPException(
+                        status_code=502,
+                        detail=str(
+                            result.get("errors", "Image editing failed.")
+                        )
+                    )
+
+                output = result.get("result")
+
+                if isinstance(output, dict):
+                    generated_image = output.get("image")
+                elif isinstance(output, str):
+                    generated_image = output
+                else:
+                    generated_image = None
 
         if not generated_image:
             raise HTTPException(
@@ -342,8 +381,6 @@ async def upload_image(
             "status": "success",
             "message": "Image edited successfully!"
         }
-
-        
 
     except HTTPException:
         raise
@@ -359,6 +396,8 @@ async def upload_image(
             status_code=502,
             detail="Could not edit the uploaded image."
         )
+
+
         
 
 
