@@ -36,7 +36,7 @@ def home():
 
 @app.post("/generate")
 def generate_image(request: ImageRequest):
-
+    request_started = time.perf_counter()
     prompt = request.prompt.strip()
     quality = request.quality.lower().strip()
 
@@ -122,6 +122,7 @@ def generate_image(request: ImageRequest):
         )
 
     try:
+        cloudflare_started = time.perf_counter()
         response = requests.post(
             f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/black-forest-labs/flux-1-schnell",
             headers={
@@ -135,6 +136,14 @@ def generate_image(request: ImageRequest):
         )
 
         response.raise_for_status()
+        cloudflare_seconds = (
+            time.perf_counter() - cloudflare_started
+        )
+
+        print(
+            f"CLOUDFLARE GENERATION: {cloudflare_seconds:.2f} seconds",
+            flush=True
+        )
 
         result = response.json()
 
