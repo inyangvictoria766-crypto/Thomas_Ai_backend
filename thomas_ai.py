@@ -16,6 +16,55 @@ from pydantic import BaseModel, Field
 
 
 app = FastAPI(title="Thomas AI Backend")
+from fastapi import Header
+
+def get_authenticated_user(
+    authorization: str = Header(None)
+):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required."
+        )
+
+    access_token = authorization.replace("Bearer ", "", 1).strip()
+    token_hash = hashlib.sha256(
+        access_token.encode()
+    ).hexdigest()
+
+    connection = None
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT user_id, credits
+            FROM app_users
+            WHERE token_hash = %s;
+        """, (token_hash,))
+
+        user = cursor.fetchone()
+
+        cursor.close()
+
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid access token."
+            )
+
+        return {
+            "user_id": str(user[0]),
+            "credits": user[1]
+        }
+
+    finally:
+        if connection:
+            connection.close()
 
 
 # IMAGE REQUEST MODEL
