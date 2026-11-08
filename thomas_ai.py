@@ -379,6 +379,13 @@ async def upload_image(
             status_code=400,
             detail="Quality must be low, medium, or high."
         )
+    credits_used = CREDIT_COSTS[quality]
+
+new_balance = reserve_credits(
+    current_user["user_id"],
+    credits_used,
+    quality
+)
 
     if not prompt:
         raise HTTPException(
