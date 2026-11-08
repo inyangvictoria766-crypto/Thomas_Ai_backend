@@ -532,8 +532,14 @@ new_balance = reserve_credits(
     if len(image_data) > 10 * 1024 * 1024:
         raise HTTPException(
             status_code=413,
-            detail="Image must be 10 MB or smaller."
-        )
+            detail="Image must be 10 MB or smaller.")
+    credits_used = CREDIT_COSTS[quality]
+
+new_balance = reserve_credits(
+    current_user["user_id"],
+    credits_used,
+    quality
+)
 
     try:
         original = Image.open(io.BytesIO(image_data))
