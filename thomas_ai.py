@@ -321,13 +321,14 @@ except Exception as error:
     api_token = os.getenv("CLOUDFLARE_API_TOKEN")
     account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
 
-    if not api_token or not account_id:
-        raise HTTPException(
+    
+
+    try:
+        if not api_token or not account_id:
+            raise HTTPException(
             status_code=500,
             detail="Cloudflare credentials are missing."
         )
-
-    try:
         cloudflare_started = time.perf_counter()
         response = requests.post(
             f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/black-forest-labs/flux-1-schnell",
@@ -374,10 +375,21 @@ except Exception as error:
             "status": "success"
         }
 
-    except HTTPException:
+        except HTTPException:
+        refund_credits(
+            current_user["user_id"],
+            credits_used,
+            quality
+        )
         raise
 
-    except requests.RequestException as error:
+    except Exception as error:
+
+        refund_credits(
+            current_user["user_id"],
+            credits_used,
+            quality
+        )
 
         print(
             "CLOUDFLARE ERROR:",
