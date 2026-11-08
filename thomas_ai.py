@@ -479,8 +479,6 @@ def studiolm_check():
 # IMAGE UPLOAD AND AI EDITING
 
 
-
-
 @app.post("/upload-image")
 async def upload_image(
     prompt: str = Form(...),
@@ -723,10 +721,7 @@ async def upload_image(
             status_code=502,
             detail="Could not edit the uploaded image."
         )
-
-
-
-
+            
 
         
 
