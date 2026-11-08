@@ -537,5 +537,63 @@ def setup_database():
             status_code=500,
             detail="Database setup failed."
         )
+# ANONYMOUS USER REGISTRATION
+
+@app.post("/register")
+def register_user():
+
+    user_id = str(uuid.uuid4())
+
+    access_token = secrets.token_urlsafe(32)
+
+    token_hash = hashlib.sha256(
+        access_token.encode()
+    ).hexdigest()
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            ALTER TABLE app_users
+            ADD COLUMN IF NOT EXISTS token_hash TEXT UNIQUE;
+        """)
+
+        cursor.execute("""
+            INSERT INTO app_users (
+                user_id,
+                credits,
+                token_hash
+            )
+            VALUES (%s, 0, %s);
+        """, (user_id, token_hash))
+
+        connection.commit()
+
+        cursor.close()
+        connection.close()
+
+        return {
+            "status": "success",
+            "user_id": user_id,
+            "access_token": access_token,
+            "credits": 0
+        }
+
+    except Exception as error:
+
+        print(
+            "REGISTRATION ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Account registration failed."
+        )
         
         
