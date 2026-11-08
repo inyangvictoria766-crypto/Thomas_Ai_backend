@@ -479,6 +479,8 @@ def studiolm_check():
 # IMAGE UPLOAD AND AI EDITING
 
 
+
+
 @app.post("/upload-image")
 async def upload_image(
     prompt: str = Form(...),
@@ -489,26 +491,21 @@ async def upload_image(
     prompt = prompt.strip()
     quality = quality.lower().strip()
 
-    
-    if quality not in ["low", "medium", "high"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Quality must be low, medium, or high."
-        )
-
-    credits_used = CREDIT_COSTS[quality]
-
-    new_balance = reserve_credits(
-        current_user["user_id"],
-        credits_used,
-        quality
-    )
+    # VALIDATE PROMPT
     if not prompt:
         raise HTTPException(
             status_code=400,
             detail="Please enter an editing prompt."
         )
 
+    # VALIDATE QUALITY
+    if quality not in ["low", "medium", "high"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Quality must be low, medium, or high."
+        )
+
+    # VALIDATE UPLOAD TYPE
     if not image.content_type or not image.content_type.startswith("image/"):
         raise HTTPException(
             status_code=400,
@@ -516,10 +513,8 @@ async def upload_image(
         )
 
     image_data = await image.read()
-    
 
-     
-     if not image_data:
+    if not image_data:
         raise HTTPException(
             status_code=400,
             detail="The uploaded image is empty."
@@ -531,6 +526,7 @@ async def upload_image(
             detail="Image must be 10 MB or smaller."
         )
 
+    # RESERVE CREDITS
     credits_used = CREDIT_COSTS[quality]
 
     new_balance = reserve_credits(
@@ -540,10 +536,14 @@ async def upload_image(
     )
 
     try:
+        # OPEN UPLOADED IMAGE
         original = Image.open(io.BytesIO(image_data))
         original = original.convert("RGB")
-     
-        # HIGH QUALITY: OpenAI image editing
+
+        generated_image = None
+        provider = None
+
+        # HIGH QUALITY: OPENAI
         if quality == "high":
 
             openai_key = os.getenv("OPENAI_API_KEY")
@@ -555,14 +555,20 @@ async def upload_image(
                 )
 
             openai_buffer = io.BytesIO()
+
             original.save(
                 openai_buffer,
                 format="JPEG",
                 quality=95
             )
+
             openai_buffer.seek(0)
 
-            client = OpenAI(api_key=openai_key)
+            client = OpenAI(
+                api_key=openai_key,
+                timeout=180.0,
+                max_retries=1
+            )
 
             result = client.images.edit(
                 model="gpt-image-2.5-sunburst",
@@ -584,8 +590,9 @@ async def upload_image(
             generated_image = result.data[0].b64_json
             provider = "openai"
 
+        # LOW AND MEDIUM: CLOUDFLARE
         else:
-            # LOW and MEDIUM: Existing Cloudflare editing
+
             api_token = os.getenv("CLOUDFLARE_API_TOKEN")
             account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
 
@@ -603,6 +610,7 @@ async def upload_image(
             original = original.resize((width, height))
 
             image_buffer = io.BytesIO()
+
             original.save(
                 image_buffer,
                 format="JPEG",
@@ -638,7 +646,12 @@ async def upload_image(
 
             response.raise_for_status()
 
-            if response.headers.get("content-type", "").startswith("image/"):
+            provider = "cloudflare"
+
+            if response.headers.get(
+                "content-type", ""
+            ).startswith("image/"):
+
                 generated_image = base64.b64encode(
                     response.content
                 ).decode("utf-8")
@@ -650,7 +663,10 @@ async def upload_image(
                     raise HTTPException(
                         status_code=502,
                         detail=str(
-                            result.get("errors", "Image editing failed.")
+                            result.get(
+                                "errors",
+                                "Image editing failed."
+                            )
                         )
                     )
 
@@ -658,25 +674,25 @@ async def upload_image(
 
                 if isinstance(output, dict):
                     generated_image = output.get("image")
+
                 elif isinstance(output, str):
                     generated_image = output
-                else:
-                    generated_image = None
-                provider = "cloudflare"
 
-                if not generated_image:
+        # VALIDATE GENERATED IMAGE
+        if not generated_image:
             raise HTTPException(
                 status_code=502,
                 detail="The model returned no image."
             )
 
-                record_generation(
+        # SAVE GENERATION HISTORY
+        record_generation(
             current_user["user_id"],
             quality,
             provider
         )
 
-                return {
+        return {
             "image": generated_image,
             "status": "success",
             "message": "Image edited successfully!"
@@ -696,11 +712,21 @@ async def upload_image(
             credits_used,
             quality
         )
-        print("IMAGE EDITING ERROR:", repr(error), flush=True)
+
+        print(
+            "IMAGE EDITING ERROR:",
+            repr(error),
+            flush=True
+        )
+
         raise HTTPException(
             status_code=502,
             detail="Could not edit the uploaded image."
-                )
+        )
+
+
+
+
 
         
 
