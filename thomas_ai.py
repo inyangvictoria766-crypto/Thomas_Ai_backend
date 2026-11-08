@@ -584,6 +584,7 @@ new_balance = reserve_credits(
                 )
 
             generated_image = result.data[0].b64_json
+            provider = "openai"
 
         else:
             # LOW and MEDIUM: Existing Cloudflare editing
@@ -663,6 +664,7 @@ new_balance = reserve_credits(
                     generated_image = output
                 else:
                     generated_image = None
+                provider = "cloudflare"
 
         if not generated_image:
             raise HTTPException(
