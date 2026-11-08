@@ -66,6 +66,89 @@ def get_authenticated_user(
         if connection:
             connection.close()
 
+def reserve_credits(user_id, amount, quality):
+    connection = None
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+
+        cursor = connection.cursor()
+
+        # Deduct only if the balance is sufficient.
+        cursor.execute("""
+            UPDATE app_users
+            SET credits = credits - %s
+            WHERE user_id = %s
+              AND credits >= %s
+            RETURNING credits;
+        """, (amount, user_id, amount))
+
+        result = cursor.fetchone()
+
+        if not result:
+            cursor.execute("""
+                SELECT credits
+                FROM app_users
+                WHERE user_id = %s;
+            """, (user_id,))
+
+            account = cursor.fetchone()
+
+            if not account:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Account not found."
+                )
+
+            raise HTTPException(
+                status_code=402,
+                detail="Not enough credits."
+            )
+
+        new_balance = result[0]
+
+        cursor.execute("""
+            INSERT INTO credit_transactions
+            (user_id, amount, transaction_type, description)
+            VALUES (%s, %s, %s, %s);
+        """, (
+            user_id,
+            -amount,
+            "generation_reservation",
+            f"{quality} image generation"
+        ))
+
+        connection.commit()
+
+        return new_balance
+
+    except HTTPException:
+        if connection:
+            connection.rollback()
+        raise
+
+    except Exception as error:
+        if connection:
+            connection.rollback()
+
+        print(
+            "CREDIT RESERVATION ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail="Could not verify your credits."
+        )
+
+    finally:
+        if connection:
+            connection.close()
+
+
 
 # IMAGE REQUEST MODEL
 
