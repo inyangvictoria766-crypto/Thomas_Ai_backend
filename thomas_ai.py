@@ -16,6 +16,11 @@ from pydantic import BaseModel, Field
 
 
 app = FastAPI(title="Thomas AI Backend")
+CREDIT_COSTS = {
+    "low": 1,
+    "medium": 2,
+    "high": 3
+}
 from fastapi import Header
 
 def get_authenticated_user(
