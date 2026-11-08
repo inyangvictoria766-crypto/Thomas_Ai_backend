@@ -290,20 +290,31 @@ def generate_image(
             }
 
         except HTTPException:
-            raise
+    refund_credits(
+        current_user["user_id"],
+        credits_used,
+        quality
+    )
+    raise
 
-        except Exception as error:
+except Exception as error:
 
-            print(
-                "OPENAI IMAGE ERROR:",
-                repr(error),
-                flush=True
-            )
+    refund_credits(
+        current_user["user_id"],
+        credits_used,
+        quality
+    )
 
-            raise HTTPException(
-                status_code=502,
-                detail="OpenAI image generation failed."
-            )
+    print(
+        "OPENAI IMAGE ERROR:",
+        repr(error),
+        flush=True
+    )
+
+    raise HTTPException(
+        status_code=502,
+        detail="OpenAI image generation failed."
+)
 
     # LOW AND MEDIUM: CLOUDFLARE
 
