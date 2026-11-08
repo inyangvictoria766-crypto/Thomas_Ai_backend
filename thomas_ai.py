@@ -1,4 +1,3 @@
-
 import os
 import io
 import requests
@@ -148,6 +147,58 @@ def reserve_credits(user_id, amount, quality):
             status_code=503,
             detail="Could not verify your credits."
         )
+
+    finally:
+        if connection:
+            connection.close()
+def refund_credits(user_id, amount, quality):
+    connection = None
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            UPDATE app_users
+            SET credits = credits + %s
+            WHERE user_id = %s
+            RETURNING credits;
+        """, (amount, user_id))
+
+        result = cursor.fetchone()
+
+        if not result:
+            raise Exception("Account not found during refund.")
+
+        cursor.execute("""
+            INSERT INTO credit_transactions
+            (user_id, amount, transaction_type, description)
+            VALUES (%s, %s, %s, %s);
+        """, (
+            user_id,
+            amount,
+            "generation_refund",
+            f"Failed {quality} image generation"
+        ))
+
+        connection.commit()
+
+        return result[0]
+
+    except Exception as error:
+        if connection:
+            connection.rollback()
+
+        print(
+            "CREDIT REFUND ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise
 
     finally:
         if connection:
