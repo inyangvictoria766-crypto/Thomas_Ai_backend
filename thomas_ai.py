@@ -659,35 +659,43 @@ new_balance = reserve_credits(
                     generated_image = None
                 provider = "cloudflare"
 
-        if not generated_image:
+                if not generated_image:
             raise HTTPException(
                 status_code=502,
                 detail="The model returned no image."
             )
-        record_generation(
-    current_user["user_id"],
-    quality,
-    provider
+
+                record_generation(
+            current_user["user_id"],
+            quality,
+            provider
         )
 
-        return {
+                return {
             "image": generated_image,
             "status": "success",
             "message": "Image edited successfully!"
         }
 
     except HTTPException:
-    refund_credits(current_user["user_id"], credits_used, quality)
-    raise
+        refund_credits(
+            current_user["user_id"],
+            credits_used,
+            quality
+        )
+        raise
 
-except Exception as error:
-    refund_credits(current_user["user_id"], credits_used, quality)
-    print("IMAGE EDITING ERROR:", repr(error), flush=True)
-    raise HTTPException(
-        status_code=502,
-        detail="Could not edit the uploaded image."
-)
-
+    except Exception as error:
+        refund_credits(
+            current_user["user_id"],
+            credits_used,
+            quality
+        )
+        print("IMAGE EDITING ERROR:", repr(error), flush=True)
+        raise HTTPException(
+            status_code=502,
+            detail="Could not edit the uploaded image."
+                )
 
         
 
