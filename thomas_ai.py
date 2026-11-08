@@ -203,6 +203,43 @@ def refund_credits(user_id, amount, quality):
     finally:
         if connection:
             connection.close()
+def record_generation(user_id, quality, provider):
+    connection = None
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            INSERT INTO generation_history
+            (user_id, quality, provider, status)
+            VALUES (%s, %s, %s, %s);
+        """, (
+            user_id,
+            quality,
+            provider,
+            "success"
+        ))
+
+        connection.commit()
+        cursor.close()
+
+    except Exception as error:
+        if connection:
+            connection.rollback()
+
+        print(
+            "GENERATION HISTORY ERROR:",
+            repr(error),
+            flush=True
+        )
+
+    finally:
+        if connection:
+            connection.close()
 
 
 
