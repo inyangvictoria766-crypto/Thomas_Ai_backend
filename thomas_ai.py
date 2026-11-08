@@ -459,4 +459,80 @@ def database_check():
             status_code=500,
             detail="Database connection failed."
     )
+
+# CREATE CREDIT SYSTEM TABLES
+
+@app.post("/setup-database")
+def setup_database():
+
+    database_url = os.getenv("DATABASE_URL")
+
+    if not database_url:
+        raise HTTPException(
+            status_code=500,
+            detail="DATABASE_URL is missing."
+        )
+
+    try:
+        connection = psycopg2.connect(database_url)
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS app_users (
+                id BIGSERIAL PRIMARY KEY,
+                user_id UUID UNIQUE NOT NULL,
+                credits INTEGER NOT NULL DEFAULT 0
+                    CHECK (credits >= 0),
+                created_at TIMESTAMPTZ
+                    DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS credit_transactions (
+                id BIGSERIAL PRIMARY KEY,
+                user_id UUID NOT NULL
+                    REFERENCES app_users(user_id),
+                amount INTEGER NOT NULL,
+                transaction_type VARCHAR(30) NOT NULL,
+                description TEXT,
+                created_at TIMESTAMPTZ
+                    DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS generation_history (
+                id BIGSERIAL PRIMARY KEY,
+                user_id UUID NOT NULL
+                    REFERENCES app_users(user_id),
+                quality VARCHAR(20) NOT NULL,
+                provider VARCHAR(30),
+                status VARCHAR(20) NOT NULL,
+                created_at TIMESTAMPTZ
+                    DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        connection.commit()
+        cursor.close()
+        connection.close()
+
+        return {
+            "status": "success",
+            "message": "Credit system tables created."
+        }
+
+    except Exception as error:
+        print(
+            "DATABASE SETUP ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Database setup failed."
+        )
+        
         
