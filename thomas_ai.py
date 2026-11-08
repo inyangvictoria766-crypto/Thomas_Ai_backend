@@ -302,7 +302,7 @@ def generate_image(
                 max_retries=1
             )
 
-            response = client.images.generate(
+                        response = client.images.generate(
                 model="gpt-image-2.5-flare",
                 prompt=prompt,
                 quality="high",
@@ -318,18 +318,19 @@ def generate_image(
                     status_code=502,
                     detail="OpenAI returned no image."
                 )
-                record_generation(
-    current_user["user_id"],
-    quality,
-    "openai"
-                )
 
-                        return {
+            record_generation(
+                current_user["user_id"],
+                quality,
+                "openai"
+            )
+
+            return {
                 "image": image_data,
                 "provider": "openai",
                 "quality": "high",
                 "status": "success"
-            }
+        }
 
         except HTTPException:
             refund_credits(
