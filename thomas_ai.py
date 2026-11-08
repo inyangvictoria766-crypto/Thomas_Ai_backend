@@ -361,9 +361,9 @@ def generate_image(
     try:
         if not api_token or not account_id:
             raise HTTPException(
-            status_code=500,
-            detail="Cloudflare credentials are missing."
-        )
+                status_code=500,
+                detail="Cloudflare credentials are missing."
+            )
         cloudflare_started = time.perf_counter()
         response = requests.post(
             f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/black-forest-labs/flux-1-schnell",
