@@ -409,6 +409,11 @@ except Exception as error:
             f"TOTAL BACKEND TIME: {total_seconds:.2f} seconds",
             flush=True
         )
+        record_generation(
+    current_user["user_id"],
+    quality,
+    "cloudflare"
+)
 
         return {
             "image": image_data,
