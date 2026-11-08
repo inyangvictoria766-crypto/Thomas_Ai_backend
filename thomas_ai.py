@@ -8,7 +8,7 @@ import time
 import uuid
 import secrets
 import hashlib
-
+from fastapi import Depends
 from openai import OpenAI
 from PIL import Image
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
@@ -88,7 +88,10 @@ def home():
 
 
 @app.post("/generate")
-def generate_image(request: ImageRequest):
+def generate_image(
+    request: ImageRequest,
+    current_user: dict = Depends(get_authenticated_user)
+):
     request_started = time.perf_counter()
     prompt = request.prompt.strip()
     quality = request.quality.lower().strip()
