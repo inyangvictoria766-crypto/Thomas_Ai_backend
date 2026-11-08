@@ -671,6 +671,11 @@ new_balance = reserve_credits(
                 status_code=502,
                 detail="The model returned no image."
             )
+        record_generation(
+    current_user["user_id"],
+    quality,
+    provider
+        )
 
         return {
             "image": generated_image,
