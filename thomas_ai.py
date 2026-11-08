@@ -394,7 +394,7 @@ def generate_image(
                 status_code=502,
                 detail="Cloudflare image generation failed."
             )
-
+        
         image_data = result["result"]["image"]
         total_seconds = time.perf_counter() - request_started
 
@@ -402,11 +402,12 @@ def generate_image(
             f"TOTAL BACKEND TIME: {total_seconds:.2f} seconds",
             flush=True
         )
+
         record_generation(
-    current_user["user_id"],
-    quality,
-    "cloudflare"
-)
+            current_user["user_id"],
+            quality,
+            "cloudflare"
+        )
 
         return {
             "image": image_data,
@@ -415,7 +416,7 @@ def generate_image(
             "status": "success"
         }
 
-        except HTTPException:
+    except HTTPException:
         refund_credits(
             current_user["user_id"],
             credits_used,
@@ -424,7 +425,6 @@ def generate_image(
         raise
 
     except Exception as error:
-
         refund_credits(
             current_user["user_id"],
             credits_used,
