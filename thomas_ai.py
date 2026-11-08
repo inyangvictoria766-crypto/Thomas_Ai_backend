@@ -259,7 +259,15 @@ def home():
     }
 
 
-
+@app.get("/credits")
+def get_credits(
+    current_user: dict = Depends(get_authenticated_user)
+):
+    return {
+        "status": "success",
+        "user_id": current_user["user_id"],
+        "credits": current_user["credits"]
+}
 # IMAGE GENERATION
 
 
