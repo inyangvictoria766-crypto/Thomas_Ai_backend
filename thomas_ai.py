@@ -5,6 +5,9 @@ import requests
 import psycopg2
 import base64
 import time
+import uuid
+import secrets
+import hashlib
 
 from openai import OpenAI
 from PIL import Image
