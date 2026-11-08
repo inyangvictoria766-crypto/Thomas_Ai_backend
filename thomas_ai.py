@@ -318,6 +318,11 @@ def generate_image(
                     status_code=502,
                     detail="OpenAI returned no image."
                 )
+                record_generation(
+    current_user["user_id"],
+    quality,
+    "openai"
+                )
 
             return {
                 "image": image_data,
