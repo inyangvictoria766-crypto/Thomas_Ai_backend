@@ -252,13 +252,13 @@ def generate_image(
 
         api_key = os.getenv("OPENAI_API_KEY")
 
-        if not api_key:
-            raise HTTPException(
+        try:
+            if not api_key:
+                raise HTTPException(
                 status_code=500,
                 detail="OpenAI API key is missing."
             )
-
-        try:
+            
             client = OpenAI(
                 api_key=api_key,
                 timeout=180.0,
