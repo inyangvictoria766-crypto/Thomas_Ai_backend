@@ -292,9 +292,9 @@ def generate_image(
         try:
             if not api_key:
                 raise HTTPException(
-                status_code=500,
-                detail="OpenAI API key is missing."
-            )
+                    status_code=500,
+                    detail="OpenAI API key is missing."
+                )
             
             client = OpenAI(
                 api_key=api_key,
@@ -302,7 +302,7 @@ def generate_image(
                 max_retries=1
             )
 
-                        response = client.images.generate(
+            response = client.images.generate(
                 model="gpt-image-2.5-flare",
                 prompt=prompt,
                 quality="high",
@@ -330,7 +330,7 @@ def generate_image(
                 "provider": "openai",
                 "quality": "high",
                 "status": "success"
-        }
+            }
 
         except HTTPException:
             refund_credits(
@@ -350,8 +350,7 @@ def generate_image(
             raise HTTPException(
                 status_code=502,
                 detail="OpenAI image generation failed."
-                )
-
+            )
     # LOW AND MEDIUM: CLOUDFLARE
 
     api_token = os.getenv("CLOUDFLARE_API_TOKEN")
