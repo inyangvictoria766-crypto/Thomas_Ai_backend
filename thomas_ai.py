@@ -516,8 +516,9 @@ async def upload_image(
         )
 
     image_data = await image.read()
-
     
+
+     
      if not image_data:
         raise HTTPException(
             status_code=400,
@@ -541,7 +542,7 @@ async def upload_image(
     try:
         original = Image.open(io.BytesIO(image_data))
         original = original.convert("RGB")
-
+     
         # HIGH QUALITY: OpenAI image editing
         if quality == "high":
 
