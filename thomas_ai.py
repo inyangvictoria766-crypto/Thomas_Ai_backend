@@ -490,7 +490,8 @@ def studiolm_check():
 async def upload_image(
     prompt: str = Form(...),
     quality: str = Form("low"),
-    image: UploadFile = File(...)
+    image: UploadFile = File(...),
+    current_user: dict = Depends(get_authenticated_user)
 ):
     prompt = prompt.strip()
     quality = quality.lower().strip()
