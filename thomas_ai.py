@@ -677,19 +677,16 @@ new_balance = reserve_credits(
         }
 
     except HTTPException:
-        raise
+    refund_credits(current_user["user_id"], credits_used, quality)
+    raise
 
-    except Exception as error:
-        print(
-            "IMAGE EDITING ERROR:",
-            repr(error),
-            flush=True
-        )
-
-        raise HTTPException(
-            status_code=502,
-            detail="Could not edit the uploaded image."
-        )
+except Exception as error:
+    refund_credits(current_user["user_id"], credits_used, quality)
+    print("IMAGE EDITING ERROR:", repr(error), flush=True)
+    raise HTTPException(
+        status_code=502,
+        detail="Could not edit the uploaded image."
+)
 
 
         
