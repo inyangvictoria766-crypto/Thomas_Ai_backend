@@ -489,19 +489,20 @@ async def upload_image(
     prompt = prompt.strip()
     quality = quality.lower().strip()
 
+    t
     if quality not in ["low", "medium", "high"]:
         raise HTTPException(
             status_code=400,
             detail="Quality must be low, medium, or high."
         )
+
     credits_used = CREDIT_COSTS[quality]
 
-new_balance = reserve_credits(
-    current_user["user_id"],
-    credits_used,
-    quality
-)
-
+    new_balance = reserve_credits(
+        current_user["user_id"],
+        credits_used,
+        quality
+    )
     if not prompt:
         raise HTTPException(
             status_code=400,
