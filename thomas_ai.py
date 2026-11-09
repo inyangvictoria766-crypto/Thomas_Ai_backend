@@ -470,7 +470,7 @@ def generate_image(
     except HTTPException:
         refund_credits(
             current_user["user_id"],
-            credits_used,
+            reservation_id,
             quality
         )
         raise
@@ -478,7 +478,7 @@ def generate_image(
     except Exception as error:
         refund_credits(
             current_user["user_id"],
-            credits_used,
+            reservation_id,
             quality
         )
 
