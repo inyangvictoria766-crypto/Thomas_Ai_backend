@@ -72,6 +72,7 @@ def get_authenticated_user(
 
 def reserve_credits(user_id, amount, quality):
     connection = None
+    reservation_id = str(uuid.uuid4())
 
     try:
         connection = psycopg2.connect(
@@ -80,7 +81,6 @@ def reserve_credits(user_id, amount, quality):
 
         cursor = connection.cursor()
 
-        # Deduct only if the balance is sufficient.
         cursor.execute("""
             UPDATE app_users
             SET credits = credits - %s
@@ -115,18 +115,25 @@ def reserve_credits(user_id, amount, quality):
 
         cursor.execute("""
             INSERT INTO credit_transactions
-            (user_id, amount, transaction_type, description)
-            VALUES (%s, %s, %s, %s);
+            (
+                user_id,
+                amount,
+                transaction_type,
+                description,
+                reservation_id
+            )
+            VALUES (%s, %s, %s, %s, %s::uuid);
         """, (
             user_id,
             -amount,
             "generation_reservation",
-            f"{quality} image generation"
+            f"{quality} image generation",
+            reservation_id
         ))
 
         connection.commit()
 
-        return new_balance
+        return new_balance, reservation_id
 
     except HTTPException:
         if connection:
