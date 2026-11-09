@@ -331,7 +331,7 @@ def generate_image(
 
     new_balance, reservation_id = reserve_credits(
         current_user["user_id"],
-        credits_used,
+        reservation_id,
         quality
     )
 
@@ -581,7 +581,7 @@ async def upload_image(
     
     new_balance, reservation_id = reserve_credits(
         current_user["user_id"],
-        credits_used,
+        reservation_id,
         quality
     )
 
