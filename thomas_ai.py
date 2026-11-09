@@ -291,6 +291,14 @@ def generate_image(
             status_code=400,
             detail="Invalid image quality."
         )
+     # RESERVE CREDITS
+    credits_used = CREDIT_COSTS[quality]
+
+    new_balance = reserve_credits(
+        current_user["user_id"],
+        credits_used,
+        quality
+    )
 
     # HIGH QUALITY: OPENAI
     if quality == "high":
