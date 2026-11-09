@@ -158,7 +158,7 @@ def reserve_credits(user_id, amount, quality):
     finally:
         if connection:
             connection.close()
-def refund_credits(user_id, amount, quality):
+def refund_credits(user_id, reservation_id, quality):
     connection = None
 
     try:
@@ -169,31 +169,60 @@ def refund_credits(user_id, amount, quality):
         cursor = connection.cursor()
 
         cursor.execute("""
-            UPDATE app_users
-            SET credits = credits + %s
+            INSERT INTO credit_transactions
+            (
+                user_id,
+                amount,
+                transaction_type,
+                description,
+                reservation_id
+            )
+            SELECT
+                user_id,
+                -amount,
+                'generation_refund',
+                %s,
+                reservation_id
+            FROM credit_transactions
             WHERE user_id = %s
-            RETURNING credits;
-        """, (amount, user_id))
+              AND reservation_id = %s
+              AND transaction_type = 'generation_reservation'
+            ON CONFLICT (reservation_id, transaction_type)
+            WHERE reservation_id IS NOT NULL
+            DO NOTHING
+            RETURNING amount;
+        """, (
+            f"Failed {quality} image generation",
+            user_id,
+            reservation_id
+        ))
 
         result = cursor.fetchone()
 
         if not result:
-            raise Exception("Account not found during refund.")
+            connection.commit()
+            print(
+                "REFUND SKIPPED: Already refunded or reservation not found.",
+                flush=True
+            )
+            return False
+
+        refund_amount = result[0]
 
         cursor.execute("""
-            INSERT INTO credit_transactions
-            (user_id, amount, transaction_type, description)
-            VALUES (%s, %s, %s, %s);
-        """, (
-            user_id,
-            amount,
-            "generation_refund",
-            f"Failed {quality} image generation"
-        ))
+            UPDATE app_users
+            SET credits = credits + %s
+            WHERE user_id = %s
+            RETURNING credits;
+        """, (refund_amount, user_id))
+
+        balance = cursor.fetchone()
+
+        if not balance:
+            raise Exception("Account not found during refund.")
 
         connection.commit()
-
-        return result[0]
+        return balance[0]
 
     except Exception as error:
         if connection:
@@ -204,7 +233,6 @@ def refund_credits(user_id, amount, quality):
             repr(error),
             flush=True
         )
-
         raise
 
     finally:
