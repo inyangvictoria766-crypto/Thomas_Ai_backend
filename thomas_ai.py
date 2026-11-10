@@ -488,6 +488,7 @@ async def paystack_webhook(request: Request):
 
         verification = verification_response.json()
         verified_payment = verification.get("data") or {}
+        verified_metadata = verified_payment.get("metadata") or {}
 
         if (
             not verification_response.ok
@@ -535,7 +536,7 @@ async def paystack_webhook(request: Request):
 
         if (
             amount != expected_amount
-            or metadata.get("user_id") != str(user_id)
+            or verified_metadata.get("user_id") != str(user_id)
         ):
             raise HTTPException(
                 status_code=400,
