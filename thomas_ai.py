@@ -45,16 +45,13 @@ class CreditPurchaseRequest(BaseModel):
     
 from fastapi import Header
 
-def get_authenticated_user(
-    authorization: str = Header(None)
-):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401,
-            detail="Authentication required."
-        )
+security = HTTPBearer()
 
-    access_token = authorization.replace("Bearer ", "", 1).strip()
+def get_authenticated_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    access_token = credentials.credentials
+
     token_hash = hashlib.sha256(
         access_token.encode()
     ).hexdigest()
