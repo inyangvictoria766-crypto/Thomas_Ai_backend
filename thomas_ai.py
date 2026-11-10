@@ -434,13 +434,52 @@ def buy_credits(
         
 
     except requests.RequestException:
-    mark_payment_failed(reference)
+    
 
     raise HTTPException(
         status_code=502,
         detail="Payment service temporarily unavailable."
     )
-        
+
+@app.get("/payment-status/{reference}")
+def payment_status(
+    reference: str,
+    current_user: dict = Depends(get_authenticated_user)
+):
+    connection = None
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT status, credits
+            FROM payment_transactions
+            WHERE reference = %s
+            AND user_id = %s;
+        """, (
+            reference,
+            current_user["user_id"]
+        ))
+
+        transaction = cursor.fetchone()
+
+        if not transaction:
+            raise HTTPException(
+                status_code=404,
+                detail="Payment not found."
+            )
+
+        return {
+            "status": transaction[0],
+            "credits": transaction[1]
+        }
+
+    finally:
+        if connection:
+            connection.close()
 @app.post("/paystack-webhook")
 async def paystack_webhook(request: Request):
 
