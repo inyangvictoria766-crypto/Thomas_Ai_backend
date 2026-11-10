@@ -404,9 +404,22 @@ def buy_credits(
             timeout=30
                 )
 
+        t
         result = response.json()
+        payment_data = result.get("data") or {}
 
-        if not response.ok or not result.get("status"):
+        authorization_url = payment_data.get("authorization_url")
+        returned_reference = payment_data.get("reference")
+
+        if (
+             not response.ok
+             or not result.get("status")
+             or not authorization_url
+            or not authorization_url.startswith(
+                "https://checkout.paystack.com/"
+            )
+            or returned_reference != reference
+        ):
             raise HTTPException(
                 status_code=502,
                 detail="Could not initialize payment."
@@ -414,9 +427,11 @@ def buy_credits(
 
         return {
             "status": "success",
-            "authorization_url": result["data"]["authorization_url"],
+            "authorization_url": authorization_url,
             "reference": reference
         }
+
+        
 
     except requests.RequestException:
         raise HTTPException(
