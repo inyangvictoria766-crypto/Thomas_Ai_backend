@@ -8,6 +8,7 @@ import uuid
 import secrets
 import hmac
 import hashlib
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from fastapi import Request
 from fastapi import Depends
