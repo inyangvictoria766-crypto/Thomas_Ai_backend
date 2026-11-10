@@ -434,10 +434,12 @@ def buy_credits(
         
 
     except requests.RequestException:
-        raise HTTPException(
-            status_code=502,
-            detail="Payment service temporarily unavailable."
-        )
+    mark_payment_failed(reference)
+
+    raise HTTPException(
+        status_code=502,
+        detail="Payment service temporarily unavailable."
+    )
         
 @app.post("/paystack-webhook")
 async def paystack_webhook(request: Request):
