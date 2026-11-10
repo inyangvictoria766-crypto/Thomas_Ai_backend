@@ -20,6 +20,25 @@ CREDIT_COSTS = {
     "medium": 2,
     "high": 3
 }
+CREDIT_PACKAGES = {
+    "starter": {
+        "amount": 50000,
+        "credits": 20
+    },
+    "standard": {
+        "amount": 100000,
+        "credits": 50
+    },
+    "premium": {
+        "amount": 250000,
+        "credits": 150
+    }
+}
+
+class CreditPurchaseRequest(BaseModel):
+    package: str
+    email: str
+    
 from fastapi import Header
 
 def get_authenticated_user(
@@ -303,6 +322,105 @@ def get_credits(
         "user_id": current_user["user_id"],
         "credits": current_user["credits"]
 }
+    
+# buying credits 
+@app.post("/buy-credits")
+def buy_credits(
+    data: CreditPurchaseRequest,
+    current_user: dict = Depends(get_authenticated_user)
+):
+    package_name = data.package.lower().strip()
+    package = CREDIT_PACKAGES.get(package_name)
+
+    if not package:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid credit package."
+        )
+
+    secret_key = os.getenv("PAYSTACK_SECRET_KEY")
+
+    if not secret_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Payment service is not configured."
+        )
+
+    reference = "thomas_" + uuid.uuid4().hex
+
+    connection = None
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            INSERT INTO payment_transactions
+            (user_id, reference, amount, credits, status)
+            VALUES (%s, %s, %s, %s, 'pending');
+        """, (
+            current_user["user_id"],
+            reference,
+            package["amount"],
+            package["credits"]
+        ))
+
+        connection.commit()
+        cursor.close()
+
+    except Exception:
+        if connection:
+            connection.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Could not create payment record."
+        )
+
+    finally:
+        if connection:
+            connection.close()
+
+    try:
+        response = requests.post(
+            "https://api.paystack.co/transaction/initialize",
+            headers={
+                "Authorization": f"Bearer {secret_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "email": data.email,
+                "amount": package["amount"],
+                "reference": reference,
+                "metadata": {
+                    "user_id": current_user["user_id"],
+                    "package": package_name
+                }
+            },
+            timeout=30
+        )
+
+        result = response.json()
+
+        if not response.ok or not result.get("status"):
+            raise HTTPException(
+                status_code=502,
+                detail="Could not initialize payment."
+            )
+
+        return {
+            "status": "success",
+            "authorization_url": result["data"]["authorization_url"],
+            "reference": reference
+        }
+
+    except requests.RequestException:
+        raise HTTPException(
+            status_code=502,
+            detail="Payment service temporarily unavailable."
+        )
 # IMAGE GENERATION
 
 
