@@ -394,13 +394,15 @@ def buy_credits(
                 "Content-Type": "application/json"
             },
             json={
-                "email": data.email,
-                "amount": package["amount"],
-                "reference": reference,
-                "metadata": {
-                    "user_id": current_user["user_id"],
-                    "package": package_name
-                }
+    "email": data.email,
+    "amount": package["amount"],
+    "currency": "NGN",
+    "reference": reference,
+    "metadata": {
+        "user_id": current_user["user_id"],
+        "package": package_name
+    }
+            }
             },
             timeout=30
         )
