@@ -404,7 +404,7 @@ def buy_credits(
             timeout=30
                 )
 
-        t
+        
         result = response.json()
         payment_data = result.get("data") or {}
 
