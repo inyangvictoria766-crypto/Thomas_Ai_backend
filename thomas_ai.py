@@ -480,6 +480,36 @@ async def paystack_webhook(request: Request):
             status_code=400,
             detail="Invalid payment details."
         )
+    try:
+        verification_response = requests.get(
+            f"https://api.paystack.co/transaction/verify/{reference}",
+            headers={
+                "Authorization": f"Bearer {secret_key}"
+            },
+            timeout=20
+        )
+
+        verification = verification_response.json()
+        verified_payment = verification.get("data") or {}
+
+        if (
+            not verification_response.ok
+            or not verification.get("status")
+            or verified_payment.get("status") != "success"
+            or verified_payment.get("reference") != reference
+            or verified_payment.get("amount") != amount
+            or verified_payment.get("currency") != "NGN"
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Paystack payment verification failed."
+            )
+
+    except requests.RequestException:
+        raise HTTPException(
+            status_code=502,
+            detail="Could not verify payment with Paystack."
+        )
 
     connection = None
 
