@@ -425,21 +425,22 @@ def buy_credits(
                 detail="Could not initialize payment."
             )
 
+        
         return {
             "status": "success",
             "authorization_url": authorization_url,
             "reference": reference
         }
 
+    except requests.RequestException:
+        raise HTTPException(
+            status_code=502,
+            detail="Payment service temporarily unavailable."
+        )
+
         
 
-    except requests.RequestException:
     
-
-    raise HTTPException(
-        status_code=502,
-        detail="Payment service temporarily unavailable."
-    )
 
 @app.get("/payment-status/{reference}")
 def payment_status(
