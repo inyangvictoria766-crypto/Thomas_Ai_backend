@@ -6,7 +6,10 @@ import base64
 import time
 import uuid
 import secrets
+import hmac
 import hashlib
+
+from fastapi import Request
 from fastapi import Depends
 from openai import OpenAI
 from PIL import Image
