@@ -424,6 +424,144 @@ def buy_credits(
             status_code=502,
             detail="Payment service temporarily unavailable."
         )
+        
+@app.post("/paystack-webhook")
+async def paystack_webhook(request: Request):
+
+    secret_key = os.getenv("PAYSTACK_SECRET_KEY")
+
+    if not secret_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Payment service unavailable."
+        )
+
+    raw_body = await request.body()
+
+    signature = request.headers.get(
+        "x-paystack-signature", ""
+    )
+
+    expected_signature = hmac.new(
+        secret_key.encode(),
+        raw_body,
+        hashlib.sha512
+    ).hexdigest()
+
+    if not hmac.compare_digest(
+        signature, expected_signature
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid payment signature."
+        )
+
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid webhook data."
+        )
+
+    if payload.get("event") != "charge.success":
+        return {"status": "ignored"}
+
+    payment = payload.get("data") or {}
+    reference = payment.get("reference")
+    amount = payment.get("amount")
+    currency = payment.get("currency")
+    metadata = payment.get("metadata") or {}
+
+    if not reference or currency != "NGN":
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid payment details."
+        )
+
+    connection = None
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT user_id, amount, credits, status
+            FROM payment_transactions
+            WHERE reference = %s
+            FOR UPDATE;
+        """, (reference,))
+
+        transaction = cursor.fetchone()
+
+        if not transaction:
+            raise HTTPException(
+                status_code=404,
+                detail="Payment reference not found."
+            )
+
+        user_id, expected_amount, credits, status = transaction
+
+        if (
+            amount != expected_amount
+            or metadata.get("user_id") != str(user_id)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Payment verification failed."
+            )
+
+        if status == "successful":
+            connection.commit()
+            return {"status": "already_processed"}
+
+        if status != "pending":
+            raise HTTPException(
+                status_code=400,
+                detail="Payment is not pending."
+            )
+
+        cursor.execute("""
+            UPDATE app_users
+            SET credits = credits + %s
+            WHERE user_id = %s;
+        """, (credits, user_id))
+
+        cursor.execute("""
+            UPDATE payment_transactions
+            SET status = 'successful',
+                paid_at = NOW()
+            WHERE reference = %s;
+        """, (reference,))
+
+        connection.commit()
+
+        return {
+            "status": "success",
+            "credits_added": credits
+        }
+
+    except HTTPException:
+        if connection:
+            connection.rollback()
+        raise
+
+    except Exception as error:
+        if connection:
+            connection.rollback()
+
+        print("PAYSTACK WEBHOOK ERROR:", repr(error), flush=True)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Payment processing failed."
+        )
+
+    finally:
+        if connection:
+            connection.close()
 # IMAGE GENERATION
 
 
