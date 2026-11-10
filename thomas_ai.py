@@ -397,8 +397,9 @@ def buy_credits(
                 "currency": "NGN",
                 "reference": reference,
                 "metadata": {
-                    "user_id": current_user["user_id"],
-                    "package": package_name
+                "user_id": str(current_user["user_id"]),
+                "package": package_name
+                
                 }
             },
             timeout=30
