@@ -1623,9 +1623,21 @@ def get_video_templates():
             flush=True
         )
 
+        error_body = error.read().decode(
+       "utf-8",
+        errors="replace"
+)
+
+        print(
+            "PIXVERSE TEMPLATE ERROR:",
+             error.code,
+             error_body,
+             flush=True
+)
+
         raise HTTPException(
-            status_code=502,
-            detail="Could not connect to PixVerse."
+             status_code=502,
+             detail="PixVerse template request failed."
         )
 
         
