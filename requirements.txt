@@ -6,3 +6,4 @@ studiolm
 requests
 Pillow
 openai
+cloudinary
