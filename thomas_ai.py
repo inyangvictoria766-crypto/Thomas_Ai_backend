@@ -1647,6 +1647,41 @@ def get_video_templates():
              status_code=502,
              detail="PixVerse template request failed."
         )
+@app.post("/upload-template-image")
+async def upload_template_image(file: UploadFile = File(...)):
+
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload an image."
+        )
+
+    try:
+        result = cloudinary.uploader.upload(
+            file.file,
+            folder="thomas_ai/template_uploads",
+            resource_type="image"
+        )
+
+        return {
+            "secure_url": result.get("secure_url"),
+            "public_id": result.get("public_id")
+        }
+
+    except Exception as error:
+        print(
+            "CLOUDINARY TEMPLATE UPLOAD ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not upload image."
+        )
+
+    finally:
+        await file.close()
 
         
         
