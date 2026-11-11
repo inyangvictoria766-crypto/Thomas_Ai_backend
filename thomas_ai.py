@@ -1545,5 +1545,88 @@ def video_status(video_id: int):
             status_code=502,
             detail="Could not connect to PixVerse."
     )
+
+
+@app.get("/video-templates")
+def get_video_templates():
+
+    import os
+    import json
+    import uuid
+    import urllib.request
+    import urllib.error
+
+    api_key = os.getenv("PIXVERSE_API_KEY")
+
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Video service is not configured."
+        )
+
+    request = urllib.request.Request(
+        "https://app-api.pixverse.ai/openapi/v2/video/effects/templates/list",
+        headers={
+            "API-KEY": api_key,
+            "Ai-trace-id": str(uuid.uuid4())
+        },
+        method="GET"
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=30
+        ) as response:
+
+            result = json.loads(
+                response.read().decode("utf-8")
+            )
+
+        if result.get("ErrCode") != 0:
+            raise HTTPException(
+                status_code=502,
+                detail=result.get(
+                    "ErrMsg",
+                    "Could not retrieve video templates."
+                )
+            )
+
+        data = result.get("Resp") or {}
+
+        return {
+            "templates": data.get("effect_items", [])
+        }
+
+    except HTTPException:
+        raise
+
+    except urllib.error.HTTPError as error:
+
+        print(
+            "PIXVERSE TEMPLATE ERROR:",
+            error.code,
+            error.read().decode("utf-8", errors="replace"),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not retrieve PixVerse templates."
+        )
+
+    except Exception as error:
+
+        print(
+            "TEMPLATE ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not connect to PixVerse."
+        )
+
         
         
