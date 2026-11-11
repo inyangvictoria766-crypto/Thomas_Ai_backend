@@ -1300,5 +1300,250 @@ def register_user():
             status_code=500,
             detail="Account registration failed."
         )
+
+# =====================================
+# PIXVERSE VIDEO GENERATION
+# =====================================
+
+@app.post("/generate-video")
+def generate_video(data: dict):
+
+    import os
+    import json
+    import uuid
+    import urllib.request
+    import urllib.error
+
+    api_key = os.getenv("PIXVERSE_API_KEY")
+
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Video service is not configured."
+        )
+
+    prompt = data.get("prompt", "").strip()
+
+    duration = data.get("duration", 5)
+    quality = data.get("quality", "720p")
+    model = data.get("model", "v6")
+    aspect_ratio = data.get("aspect_ratio", "16:9")
+
+    if not prompt:
+        raise HTTPException(
+            status_code=400,
+            detail="Prompt is required."
+        )
+
+    if len(prompt) > 5000:
+        raise HTTPException(
+            status_code=400,
+            detail="Prompt is too long."
+        )
+
+    if duration not in range(1, 16):
+        raise HTTPException(
+            status_code=400,
+            detail="Duration must be between 1 and 15 seconds."
+        )
+
+    if quality not in ["360p", "540p", "720p", "1080p"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid video quality."
+        )
+
+    if model not in [
+        "v6-max", "c1", "v6", "v3.5", "v4",
+        "v4.5", "v5", "v5-fast", "v5.5", "v5.6"
+    ]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid video model."
+        )
+
+    if aspect_ratio not in [
+        "16:9", "9:16", "4:3", "3:4",
+        "1:1", "2:3", "3:2", "21:9"
+    ]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid aspect ratio."
+        )
+
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "duration": duration,
+        "quality": quality,
+        "aspect_ratio": aspect_ratio
+    }
+
+    request = urllib.request.Request(
+        "https://app-api.pixverse.ai/openapi/v2/video/text/generate",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "API-KEY": api_key,
+            "Ai-trace-id": str(uuid.uuid4()),
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+
+    try:
+
+        with urllib.request.urlopen(
+            request,
+            timeout=60
+        ) as response:
+
+            result = json.loads(
+                response.read().decode("utf-8")
+            )
+
+        if result.get("ErrCode") != 0:
+            raise HTTPException(
+                status_code=502,
+                detail=result.get(
+                    "ErrMsg",
+                    "PixVerse rejected the request."
+                )
+            )
+
+        video_id = result.get("Resp", {}).get("video_id")
+
+        if not video_id:
+            raise HTTPException(
+                status_code=502,
+                detail="PixVerse did not return a video ID."
+            )
+
+        return {
+            "status": "processing",
+            "video_id": video_id,
+            "credits": result.get("Resp", {}).get("credits")
+        }
+
+    except HTTPException:
+        raise
+
+    except urllib.error.HTTPError as error:
+
+        print(
+            "PIXVERSE GENERATION ERROR:",
+            error.code,
+            error.read().decode("utf-8", errors="replace"),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="PixVerse video generation request failed."
+        )
+
+    except Exception as error:
+
+        print(
+            "VIDEO GENERATION ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not connect to video generation service."
+        )
+
+
+# =====================================
+# CHECK VIDEO GENERATION STATUS
+# =====================================
+
+@app.get("/video-status/{video_id}")
+def video_status(video_id: int):
+
+    import os
+    import json
+    import uuid
+    import urllib.request
+    import urllib.error
+
+    api_key = os.getenv("PIXVERSE_API_KEY")
+
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Video service is not configured."
+        )
+
+    request = urllib.request.Request(
+        f"https://app-api.pixverse.ai/openapi/v2/video/result/{video_id}",
+        headers={
+            "API-KEY": api_key,
+            "Ai-trace-id": str(uuid.uuid4())
+        },
+        method="GET"
+    )
+
+    try:
+
+        with urllib.request.urlopen(
+            request,
+            timeout=30
+        ) as response:
+
+            result = json.loads(
+                response.read().decode("utf-8")
+            )
+
+        if result.get("ErrCode") != 0:
+            raise HTTPException(
+                status_code=502,
+                detail=result.get(
+                    "ErrMsg",
+                    "Could not retrieve video status."
+                )
+            )
+
+        video = result.get("Resp") or {}
+
+        status = video.get("status")
+
+        return {
+            "video_id": video_id,
+            "status": status,
+            "video_url": video.get("url"),
+            "credits": video.get("credits")
+        }
+
+    except HTTPException:
+        raise
+
+    except urllib.error.HTTPError as error:
+
+        print(
+            "PIXVERSE STATUS ERROR:",
+            error.code,
+            error.read().decode("utf-8", errors="replace"),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not check video status."
+        )
+
+    except Exception as error:
+
+        print(
+            "VIDEO STATUS ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not connect to PixVerse."
+    )
         
         
