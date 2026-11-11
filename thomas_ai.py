@@ -8,6 +8,8 @@ import uuid
 import secrets
 import hmac
 import hashlib
+import cloudinary
+import cloudinary.uploader
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from fastapi import Request
@@ -19,6 +21,12 @@ from pydantic import BaseModel, Field
 
 
 app = FastAPI(title="Thomas AI Backend")
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True
+)
 CREDIT_COSTS = {
     "low": 1,
     "medium": 2,
