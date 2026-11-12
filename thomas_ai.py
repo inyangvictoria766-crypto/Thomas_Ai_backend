@@ -1767,28 +1767,25 @@ def higgsfield_auth_check():
         "result": response.text[:1500]
     }
 
+
+from pydantic import BaseModel, Field
+from typing import Literal
+
+class MotionTransferRequest(BaseModel):
+    video_url: str
+    image_urls: list[str] = Field(min_length=1, max_length=8)
+    prompt: str = ""
+    resolution: Literal["480p", "720p", "1080p"] = "720p"
+
+
 @app.post("/motion-transfer")
-def motion_transfer(data: dict):
+def motion_transfer(data: MotionTransferRequest):
     import os
     import requests
 
     key = os.getenv("HF_API_KEY")
     if not key:
         return {"error": "HF_API_KEY is missing"}
-
-    video_url = data.get("video_url")
-    image_urls = data.get("image_urls", [])
-    prompt = data.get("prompt", "")
-    resolution = data.get("resolution", "720p")
-
-    if not video_url:
-        return {"error": "Reference video is required"}
-
-    if not isinstance(image_urls, list) or not 1 <= len(image_urls) <= 8:
-        return {"error": "Upload between 1 and 8 images"}
-
-    if resolution not in ["480p", "720p", "1080p"]:
-        return {"error": "Invalid resolution"}
 
     try:
         response = requests.post(
@@ -1797,23 +1794,23 @@ def motion_transfer(data: dict):
                 "Authorization": f"Key {key}",
                 "Content-Type": "application/json"
             },
-            json={
-                "video_url": video_url,
-                "image_urls": image_urls,
-                "prompt": prompt,
-                "resolution": resolution
-            },
+            json=data.model_dump(),
             timeout=30
         )
 
+        try:
+            result = response.json()
+        except ValueError:
+            result = {"detail": response.text}
+
         return {
             "status_code": response.status_code,
-            "result": response.json()
+            "result": result
         }
 
-    except Exception as e:
+    except requests.RequestException as e:
         return {"error": str(e)}
-
+        
 
 @app.get("/motion-transfer-status/{request_id}")
 def motion_transfer_status(request_id: str):
