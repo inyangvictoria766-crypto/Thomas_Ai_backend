@@ -1786,7 +1786,10 @@ def motion_transfer(data: MotionTransferRequest):
 
     key = os.getenv("HF_API_KEY")
     if not key:
-        return {"error": "HF_API_KEY is missing"}
+        raise HTTPException(
+           status_code=500,
+           detail="HF_API_KEY is missing"
+       )
 
     try:
         response = requests.post(
@@ -1810,7 +1813,10 @@ def motion_transfer(data: MotionTransferRequest):
         }
 
     except requests.RequestException as e:
-        return {"error": str(e)}
+        raise HTTPException(
+          status_code=502,
+          detail=f"Higgsfield connection failed: {str(e)}"
+        )
         
 
 @app.get("/motion-transfer-status/{request_id}")
