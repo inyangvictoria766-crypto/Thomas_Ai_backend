@@ -1624,15 +1624,21 @@ def get_video_templates():
             detail="Video service is not configured."
         )
 
-    request = urllib.request.Request(
-        "https://app-api.pixverse.ai/openapi/v2/video/effects/templates/list",
-        headers={
-            "API-KEY": api_key,
-            "Ai-trace-id": str(uuid.uuid4())
-        },
-        method="GET"
-    )
+    trace_id = str(uuid.uuid4())
 
+    print("PIXVERSE REQUEST TIME:", __import__("datetime").datetime.now().isoformat(), flush=True)
+    print("PIXVERSE ENDPOINT:", url, flush=True)
+    print("PIXVERSE TRACE ID:", trace_id, flush=True)
+
+    request = urllib.request.Request(
+       url,
+       headers={
+           "API-KEY": api_key,
+            "Ai-trace-id": trace_id,
+          "Accept-Language": "en"
+       },
+        method="GET"
+  )
     try:
         with urllib.request.urlopen(
             request,
