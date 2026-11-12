@@ -1741,5 +1741,31 @@ async def upload_template_image(file: UploadFile = File(...)):
     finally:
         await file.close()
 
+
+@app.get("/higgsfield-auth-check")
+def higgsfield_auth_check():
+    import os
+    import requests
+
+    key = os.getenv("HF_API_KEY")
+
+    if not key:
+        return {"error": "HF_API_KEY is missing"}
+
+    response = requests.get(
+        "https://api.higgsfield.ai/models/higgsfield/genjutsu/restyle/v1.0/presets",
+        headers={
+            "Authorization": f"Key {key}",
+            "Accept": "application/json"
+        },
+        timeout=30
+    )
+
+    return {
+        "status_code": response.status_code,
+        "authenticated": response.status_code == 200,
+        "result": response.text[:1500]
+    }
+
         
         
