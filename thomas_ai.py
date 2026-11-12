@@ -1767,5 +1767,76 @@ def higgsfield_auth_check():
         "result": response.text[:1500]
     }
 
+@app.post("/motion-transfer")
+def motion_transfer(data: dict):
+    import os
+    import requests
+
+    key = os.getenv("HF_API_KEY")
+    if not key:
+        return {"error": "HF_API_KEY is missing"}
+
+    video_url = data.get("video_url")
+    image_urls = data.get("image_urls", [])
+    prompt = data.get("prompt", "")
+    resolution = data.get("resolution", "720p")
+
+    if not video_url:
+        return {"error": "Reference video is required"}
+
+    if not isinstance(image_urls, list) or not 1 <= len(image_urls) <= 8:
+        return {"error": "Upload between 1 and 8 images"}
+
+    if resolution not in ["480p", "720p", "1080p"]:
+        return {"error": "Invalid resolution"}
+
+    try:
+        response = requests.post(
+            "https://api.higgsfield.ai/higgsfield/genjutsu/motion-transfer/v1.0",
+            headers={
+                "Authorization": f"Key {key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "video_url": video_url,
+                "image_urls": image_urls,
+                "prompt": prompt,
+                "resolution": resolution
+            },
+            timeout=30
+        )
+
+        return {
+            "status_code": response.status_code,
+            "result": response.json()
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/motion-transfer-status/{request_id}")
+def motion_transfer_status(request_id: str):
+    import os
+    import requests
+
+    key = os.getenv("HF_API_KEY")
+
+    if not key:
+        return {"error": "HF_API_KEY is missing"}
+
+    try:
+        response = requests.get(
+            f"https://api.higgsfield.ai/requests/{request_id}/status",
+            headers={"Authorization": f"Key {key}"},
+            timeout=30
+        )
+
+        return response.json()
+
+    except Exception as e:
+        return {"error": str(e)}
+        
+
         
         
