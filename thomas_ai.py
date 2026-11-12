@@ -1836,6 +1836,11 @@ def motion_transfer_status(request_id: str):
 
     except Exception as e:
         return {"error": str(e)}
+
+
+@app.api_route("/", methods=["GET", "HEAD"])
+def health_check():
+    return {"status": "ok"}
         
 
         
