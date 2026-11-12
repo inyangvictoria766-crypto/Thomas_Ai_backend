@@ -1467,14 +1467,20 @@ def generate_video(data: dict):
 # CHECK VIDEO GENERATION STATUS
 # =====================================
 
-@app.get("/video-status/{video_id}")
-def video_status(video_id: int):
 
+@app.get("/video-templates")
+def get_video_templates(
+    type: str = "1",
+    page: int = 1,
+    pageSize: int = 20,
+    template_mode: str = None
+):
     import os
     import json
     import uuid
     import urllib.request
     import urllib.error
+    import urllib.parse
 
     api_key = os.getenv("PIXVERSE_API_KEY")
 
@@ -1484,17 +1490,46 @@ def video_status(video_id: int):
             detail="Video service is not configured."
         )
 
+    if type not in ("1", "2"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid template type."
+        )
+
+    if page < 1 or pageSize not in (10, 20, 50, 100):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid page or pageSize."
+        )
+
+    params = {
+        "type": type,
+        "page": page,
+        "pageSize": pageSize
+    }
+
+    if template_mode:
+        params["template_mode"] = template_mode
+
+    query_string = urllib.parse.urlencode(params)
+
+    url = (
+        "https://app-api.pixverse.ai"
+        "/openapi/v2/video/effects/templates/list?"
+        + query_string
+    )
+
     request = urllib.request.Request(
-        f"https://app-api.pixverse.ai/openapi/v2/video/result/{video_id}",
+        url,
         headers={
             "API-KEY": api_key,
-            "Ai-trace-id": str(uuid.uuid4())
+            "Ai-trace-id": str(uuid.uuid4()),
+            "Accept-Language": "en"
         },
         method="GET"
     )
 
     try:
-
         with urllib.request.urlopen(
             request,
             timeout=30
@@ -1505,54 +1540,71 @@ def video_status(video_id: int):
             )
 
         if result.get("ErrCode") != 0:
-            raise HTTPException(
-                status_code=502,
-                detail=result.get(
-                    "ErrMsg",
-                    "Could not retrieve video status."
-                )
+            print(
+                "PIXVERSE TEMPLATE API ERROR:",
+                result.get("ErrCode"),
+                result.get("ErrMsg"),
+                flush=True
             )
 
-        video = result.get("Resp") or {}
+            raise HTTPException(
+                status_code=502,
+                detail="PixVerse could not retrieve templates."
+            )
 
-        status = video.get("status")
+        data = result.get("Resp") or {}
 
         return {
-            "video_id": video_id,
-            "status": status,
-            "video_url": video.get("url"),
-            "credits": video.get("credits")
+            "templates": data.get("effect_items", []),
+            "page": page,
+            "pageSize": pageSize
         }
 
     except HTTPException:
         raise
 
     except urllib.error.HTTPError as error:
+        error_body = error.read().decode(
+            "utf-8",
+            errors="replace"
+        )
 
         print(
-            "PIXVERSE STATUS ERROR:",
+            "PIXVERSE TEMPLATE HTTP ERROR:",
             error.code,
-            error.read().decode("utf-8", errors="replace"),
+            error_body,
             flush=True
         )
 
         raise HTTPException(
             status_code=502,
-            detail="Could not check video status."
+            detail=f"PixVerse returned HTTP {error.code}."
         )
 
-    except Exception as error:
-
+    except urllib.error.URLError as error:
         print(
-            "VIDEO STATUS ERROR:",
-            repr(error),
+            "PIXVERSE CONNECTION ERROR:",
+            repr(error.reason),
             flush=True
         )
 
         raise HTTPException(
             status_code=502,
             detail="Could not connect to PixVerse."
+        )
+
+    except Exception as error:
+        print(
+            "PIXVERSE TEMPLATE ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="PixVerse template request failed."
     )
+        
 
 
 @app.get("/video-templates")
