@@ -1827,7 +1827,10 @@ def motion_transfer_status(request_id: str):
     key = os.getenv("HF_API_KEY")
 
     if not key:
-        return {"error": "HF_API_KEY is missing"}
+        raise HTTPException(
+            status_code=500,
+            detail="HF_API_KEY is missing"
+        )
 
     try:
         response = requests.get(
@@ -1836,10 +1839,25 @@ def motion_transfer_status(request_id: str):
             timeout=30
         )
 
+        if response.status_code >= 400:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Higgsfield status error: {response.text[:1000]}"
+            )
+
         return response.json()
 
-    except Exception as e:
-        return {"error": str(e)}
+    except requests.RequestException as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Status connection failed: {str(e)}"
+        )
+
+    except ValueError:
+        raise HTTPException(
+            status_code=502,
+            detail="Invalid JSON from Higgsfield"
+        )
 
 
 @app.api_route("/", methods=["GET", "HEAD"])
