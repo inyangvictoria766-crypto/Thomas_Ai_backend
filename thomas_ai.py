@@ -10,6 +10,7 @@ import hmac
 import hashlib
 import cloudinary
 import cloudinary.uploader
+from fastapi import UploadFile, File, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from fastapi import Request
@@ -1838,6 +1839,47 @@ def motion_transfer_status(request_id: str):
 @app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
     return {"status": "ok"}
+
+@app.post("/upload-template-video")
+async def upload_template_video(file: UploadFile = File(...)):
+    import os
+    import cloudinary
+    import cloudinary.uploader
+
+    if not file.content_type or not file.content_type.startswith("video/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload a video file"
+        )
+
+    try:
+        cloudinary.config(
+            cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+            api_key=os.getenv("CLOUDINARY_API_KEY"),
+            api_secret=os.getenv("CLOUDINARY_API_SECRET")
+        )
+
+        result = cloudinary.uploader.upload(
+            file.file,
+            resource_type="video",
+            folder="thomas_ai/motion_transfer"
+        )
+
+        return {
+            "success": True,
+            "video_url": result["secure_url"],
+            "public_id": result["public_id"],
+            "duration": result.get("duration")
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+    finally:
+        await file.close()
+        
         
 
         
