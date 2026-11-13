@@ -1204,6 +1204,44 @@ def setup_database():
                     DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        cursor.execute("""
+            ALTER TABLE app_users
+            ADD COLUMN IF NOT EXISTS name TEXT;
+        """)
+
+        cursor.execute("""
+            ALTER TABLE app_users
+            ADD COLUMN IF NOT EXISTS email TEXT;
+        """)
+
+        cursor.execute("""
+            ALTER TABLE app_users
+            ADD COLUMN IF NOT EXISTS password_hash TEXT;
+        """)
+
+        cursor.execute("""
+            ALTER TABLE app_users
+            ADD COLUMN IF NOT EXISTS google_sub TEXT;
+        """)
+
+        cursor.execute("""
+            ALTER TABLE app_users
+            ADD COLUMN IF NOT EXISTS token_hash TEXT UNIQUE;
+         """)
+
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            app_users_email_unique
+            ON app_users (LOWER(email))
+            WHERE email IS NOT NULL;
+        """)
+
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            app_users_google_sub_unique
+            ON app_users (google_sub)
+            WHERE google_sub IS NOT NULL;
+        """)
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS credit_transactions (
