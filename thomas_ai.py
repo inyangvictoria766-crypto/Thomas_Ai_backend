@@ -1187,7 +1187,8 @@ def generate_image(
                 "Content-Type": "application/json"
             },
             json={
-                "prompt": prompt
+                "prompt": prompt,
+                "steps": 4
             },
             timeout=150
         )
