@@ -1124,9 +1124,11 @@ def generate_image(
                 )
 
             record_generation(
-                current_user["user_id"],
-                quality,
-                "openai"
+    current_user["user_id"],
+    quality,
+    "openai",
+    reservation_id,
+    "gpt-image-2.5-flare"
             )
 
             return {
@@ -1208,9 +1210,12 @@ def generate_image(
         )
 
         record_generation(
-            current_user["user_id"],
-            quality,
-            "cloudflare"
+    current_user["user_id"],
+    quality,
+    "cloudflare",
+    reservation_id,
+    "@cf/black-forest-labs/flux-1-schnell"
+        )
         )
 
         return {
