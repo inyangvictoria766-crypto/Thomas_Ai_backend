@@ -19,6 +19,10 @@ from openai import OpenAI
 from PIL import Image
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
+from pwdlib import PasswordHash
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from pydantic import EmailStr
 
 
 app = FastAPI(title="Thomas AI Backend")
