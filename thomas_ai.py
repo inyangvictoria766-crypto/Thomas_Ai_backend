@@ -431,6 +431,52 @@ def link_email(
     finally:
         if connection:
             connection.close()
+
+@app.get("/auth/status")
+def get_account_status(
+    current_user: dict = Depends(get_authenticated_user)
+):
+    connection = None
+    cursor = None
+
+    try:
+        connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT name, email, credits
+            FROM app_users
+            WHERE user_id = %s;
+        """, (current_user["user_id"],))
+
+        account = cursor.fetchone()
+
+        if account is None:
+            raise HTTPException(404, "Account not found.")
+
+        name, email, credits = account
+
+        return {
+            "status": "success",
+            "name": name,
+            "email": email,
+            "has_email": email is not None,
+            "credits": credits
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print("ACCOUNT STATUS ERROR:", repr(error), flush=True)
+        raise HTTPException(500, "Unable to retrieve account status.")
+
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+            
         
 
 def reserve_credits(user_id, amount, quality):
