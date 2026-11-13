@@ -1463,6 +1463,111 @@ def generate_video(data: dict):
             detail="Could not connect to video generation service."
         )
 
+@app.get("/video-status/{video_id}")
+def get_video_status(video_id: str):
+
+    import os
+    import json
+    import uuid
+    import urllib.request
+    import urllib.error
+
+    api_key = os.getenv("PIXVERSE_API_KEY")
+
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Video service is not configured."
+        )
+
+    if not video_id or len(video_id) > 150:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid video ID."
+        )
+
+    trace_id = str(uuid.uuid4())
+
+    url = (
+        "https://app-api.pixverse.ai/openapi/v2/video/result/"
+        + urllib.parse.quote(video_id, safe="")
+    )
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "API-KEY": api_key,
+            "Ai-trace-id": trace_id,
+            "Accept-Language": "en"
+        },
+        method="GET"
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=30
+        ) as response:
+
+            result = json.loads(
+                response.read().decode("utf-8")
+            )
+
+        if result.get("ErrCode") != 0:
+            raise HTTPException(
+                status_code=502,
+                detail=result.get(
+                    "ErrMsg",
+                    "Could not retrieve video status."
+                )
+            )
+
+        return result
+
+    except HTTPException:
+        raise
+
+    except urllib.error.HTTPError as error:
+
+        print(
+            "PIXVERSE STATUS HTTP ERROR:",
+            error.code,
+            error.read().decode("utf-8", errors="replace"),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="PixVerse status request failed."
+        )
+
+    except urllib.error.URLError as error:
+
+        print(
+            "PIXVERSE STATUS CONNECTION ERROR:",
+            repr(error.reason),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not connect to PixVerse."
+        )
+
+    except Exception as error:
+
+        print(
+            "VIDEO STATUS ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not retrieve video status."
+        )
+        
+
 
 # =====================================
 # CHECK VIDEO GENERATION STATUS
