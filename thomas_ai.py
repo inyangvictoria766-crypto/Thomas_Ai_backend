@@ -1210,6 +1210,13 @@ def generate_image(
             )
         
         image_data = result["result"]["image"]
+        cloudflare_steps = 4
+        cloudflare_tiles = 4
+
+        cloudflare_cost_usd = (
+        cloudflare_tiles * 0.0000528 +
+        cloudflare_steps * 0.0001056
+    )
         total_seconds = time.perf_counter() - request_started
 
         print(
