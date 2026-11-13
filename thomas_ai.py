@@ -663,6 +663,15 @@ def record_generation(
         )
 
         cursor = connection.cursor()
+        print(
+    "GENERATION TRACKING:",
+    user_id,
+    quality,
+    provider,
+    reservation_id,
+    model,
+    flush=True
+        )
 
         cursor.execute("""
             INSERT INTO generation_history
