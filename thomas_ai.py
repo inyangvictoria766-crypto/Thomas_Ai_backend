@@ -23,6 +23,7 @@ from pwdlib import PasswordHash
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from pydantic import EmailStr
+password_hash = PasswordHash.recommended()
 
 
 app = FastAPI(title="Thomas AI Backend")
