@@ -1063,6 +1063,11 @@ async def paystack_webhook(request: Request):
     finally:
         if connection:
             connection.close()
+
+class ImageRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=1000)
+    quality: str = "low"
+    
 # IMAGE GENERATION
 
 
