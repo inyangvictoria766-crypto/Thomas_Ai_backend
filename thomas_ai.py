@@ -648,12 +648,14 @@ def refund_credits(user_id, reservation_id, quality):
         if connection:
             connection.close()
 
+
 def record_generation(
     user_id,
     quality,
     provider,
     reservation_id,
-    model
+    model,
+    provider_cost_usd=None
 ):
     connection = None
 
@@ -663,14 +665,15 @@ def record_generation(
         )
 
         cursor = connection.cursor()
+
         print(
-    "GENERATION TRACKING:",
-    user_id,
-    quality,
-    provider,
-    reservation_id,
-    model,
-    flush=True
+            "GENERATION TRACKING:",
+            user_id,
+            quality,
+            provider,
+            reservation_id,
+            model,
+            flush=True
         )
 
         cursor.execute("""
@@ -681,16 +684,18 @@ def record_generation(
                 provider,
                 status,
                 reservation_id,
-                model
+                model,
+                provider_cost_usd
             )
-            VALUES (%s, %s, %s, %s, %s, %s);
+            VALUES (%s, %s, %s, %s, %s, %s, %s);
         """, (
             user_id,
             quality,
             provider,
             "success",
             reservation_id,
-            model
+            model,
+            provider_cost_usd
         ))
 
         connection.commit()
@@ -709,16 +714,7 @@ def record_generation(
     finally:
         if connection:
             connection.close()
-        
-
-
-
-# IMAGE REQUEST MODEL
-
-class ImageRequest(BaseModel):
-    prompt: str = Field(min_length=1, max_length=1000)
-    quality: str = "low"
-
+            
 # HOME ROUTE
 
 @app.get("/")
