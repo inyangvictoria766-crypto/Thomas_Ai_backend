@@ -647,7 +647,14 @@ def refund_credits(user_id, reservation_id, quality):
     finally:
         if connection:
             connection.close()
-def record_generation(user_id, quality, provider):
+
+def record_generation(
+    user_id,
+    quality,
+    provider,
+    reservation_id,
+    model
+):
     connection = None
 
     try:
@@ -659,13 +666,22 @@ def record_generation(user_id, quality, provider):
 
         cursor.execute("""
             INSERT INTO generation_history
-            (user_id, quality, provider, status)
-            VALUES (%s, %s, %s, %s);
+            (
+                user_id,
+                quality,
+                provider,
+                status,
+                reservation_id,
+                model
+            )
+            VALUES (%s, %s, %s, %s, %s, %s);
         """, (
             user_id,
             quality,
             provider,
-            "success"
+            "success",
+            reservation_id,
+            model
         ))
 
         connection.commit()
@@ -684,6 +700,7 @@ def record_generation(user_id, quality, provider):
     finally:
         if connection:
             connection.close()
+        
 
 
 
