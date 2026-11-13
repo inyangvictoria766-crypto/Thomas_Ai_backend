@@ -649,6 +649,7 @@ def refund_credits(user_id, reservation_id, quality):
             connection.close()
 
 
+
 def record_generation(
     user_id,
     quality,
@@ -714,6 +715,7 @@ def record_generation(
     finally:
         if connection:
             connection.close()
+        
             
 # HOME ROUTE
 
