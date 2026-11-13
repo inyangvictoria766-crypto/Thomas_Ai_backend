@@ -305,9 +305,15 @@ def auth_google(data: GoogleLoginRequest):
 
         user = cursor.fetchone()
 
-        if user:
-            if user[2] and user[2] != google_sub:
-                raise HTTPException(409, "Google account conflict.")
+                if user:
+                    if user[2] != google_sub:
+                        raise HTTPException(
+                            409,
+                            "An account with this email already exists. Log in first and link Google from account settings."
+                    )
+
+            user_id = user[0]
+            credits = user[1]
 
             cursor.execute("""
                 UPDATE app_users
