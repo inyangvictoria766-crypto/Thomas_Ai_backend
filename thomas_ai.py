@@ -1230,13 +1230,13 @@ def generate_image(
         )
 
         record_generation(
-            current_user["user_id"],
+          current_user["user_id"],
             quality,
-            "cloudflare",
-            reservation_id,
-            "@cf/black-forest-labs/flux-1-schnell",
-            cloudflare_cost_usd
-          )
+          "cloudflare",
+           reservation_id,
+          "@cf/black-forest-labs/flux-1-schnell",
+          cloudflare_cost_usd
+        )
         
 
         return {
