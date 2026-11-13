@@ -56,6 +56,19 @@ CREDIT_PACKAGES = {
 class CreditPurchaseRequest(BaseModel):
     package: str
     email: str
+class EmailRegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
+class EmailLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class GoogleLoginRequest(BaseModel):
+    credential: str
     
 from fastapi import Header
 
@@ -103,6 +116,316 @@ def get_authenticated_user(
     finally:
         if connection:
             connection.close()
+
+def create_auth_session(cursor, user_id, credits):
+    access_token = secrets.token_urlsafe(32)
+
+    token_hash = hashlib.sha256(
+        access_token.encode()
+    ).hexdigest()
+
+    cursor.execute("""
+        UPDATE app_users
+        SET token_hash = %s
+        WHERE user_id = %s;
+    """, (token_hash, user_id))
+
+    return {
+        "status": "success",
+        "user_id": str(user_id),
+        "access_token": access_token,
+        "credits": credits
+    }
+
+
+@app.post("/auth/register")
+def auth_register(data: EmailRegisterRequest):
+    name = data.name.strip()
+    email = data.email.strip().lower()
+    password = data.password
+
+    if not name or "@" not in email:
+        raise HTTPException(400, "Enter a valid name and email.")
+
+    if len(password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters.")
+
+    connection = None
+
+    try:
+        connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT user_id FROM app_users
+            WHERE LOWER(email) = %s;
+        """, (email,))
+
+        if cursor.fetchone():
+            raise HTTPException(409, "Email already registered.")
+
+        user_id = str(uuid.uuid4())
+        access_token = secrets.token_urlsafe(32)
+
+        token_hash = hashlib.sha256(
+            access_token.encode()
+        ).hexdigest()
+
+        hashed_password = password_hash.hash(password)
+
+        cursor.execute("""
+            INSERT INTO app_users (
+                user_id, credits, token_hash,
+                name, email, password_hash
+            )
+            VALUES (%s, 0, %s, %s, %s, %s);
+        """, (
+            user_id,
+            token_hash,
+            name,
+            email,
+            hashed_password
+        ))
+
+        connection.commit()
+        cursor.close()
+
+        return {
+            "status": "success",
+            "user_id": user_id,
+            "access_token": access_token,
+            "credits": 0
+        }
+
+    except HTTPException:
+        if connection:
+            connection.rollback()
+        raise
+
+    except psycopg2.errors.UniqueViolation:
+        if connection:
+            connection.rollback()
+        raise HTTPException(409, "Email already registered.")
+
+    except Exception as error:
+        if connection:
+            connection.rollback()
+
+        print("AUTH REGISTER ERROR:", repr(error), flush=True)
+        raise HTTPException(500, "Registration failed.")
+
+    finally:
+        if connection:
+            connection.close()
+
+
+@app.post("/auth/login")
+def auth_login(data: EmailLoginRequest):
+    email = data.email.strip().lower()
+
+    connection = None
+
+    try:
+        connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT user_id, credits, password_hash
+            FROM app_users
+            WHERE LOWER(email) = %s;
+        """, (email,))
+
+        user = cursor.fetchone()
+
+        if (
+            not user
+            or not user[2]
+            or not password_hash.verify(data.password, user[2])
+        ):
+            raise HTTPException(401, "Invalid email or password.")
+
+        result = create_auth_session(
+            cursor, user[0], user[1]
+        )
+
+        connection.commit()
+        cursor.close()
+
+        return result
+
+    except HTTPException:
+        if connection:
+            connection.rollback()
+        raise
+
+    except Exception as error:
+        if connection:
+            connection.rollback()
+
+        print("AUTH LOGIN ERROR:", repr(error), flush=True)
+        raise HTTPException(500, "Login failed.")
+
+    finally:
+        if connection:
+            connection.close()
+
+
+@app.post("/auth/google")
+def auth_google(data: GoogleLoginRequest):
+    connection = None
+
+    try:
+        client_id = os.getenv("GOOGLE_CLIENT_ID")
+
+        if not client_id:
+            raise HTTPException(500, "Google login is not configured.")
+
+        google_user = id_token.verify_oauth2_token(
+            data.credential,
+            google_requests.Request(),
+            client_id
+        )
+
+        email = google_user.get("email", "").strip().lower()
+        google_sub = google_user.get("sub")
+        name = google_user.get("name", "Thomas AI User")
+
+        if not email or not google_sub or not google_user.get("email_verified"):
+            raise HTTPException(401, "Google account verification failed.")
+
+        connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT user_id, credits, google_sub
+            FROM app_users
+            WHERE LOWER(email) = %s
+            FOR UPDATE;
+        """, (email,))
+
+        user = cursor.fetchone()
+
+        if user:
+            if user[2] and user[2] != google_sub:
+                raise HTTPException(409, "Google account conflict.")
+
+            cursor.execute("""
+                UPDATE app_users
+                SET google_sub = %s
+                WHERE user_id = %s;
+            """, (google_sub, user[0]))
+
+            user_id = user[0]
+            credits = user[1]
+
+        else:
+            user_id = str(uuid.uuid4())
+            credits = 0
+
+            cursor.execute("""
+                INSERT INTO app_users (
+                    user_id, credits, name, email, google_sub
+                )
+                VALUES (%s, 0, %s, %s, %s);
+            """, (user_id, name, email, google_sub))
+
+        result = create_auth_session(
+            cursor, user_id, credits
+        )
+
+        connection.commit()
+        cursor.close()
+
+        return result
+
+    except HTTPException:
+        if connection:
+            connection.rollback()
+        raise
+
+    except ValueError:
+        if connection:
+            connection.rollback()
+        raise HTTPException(401, "Invalid Google identity token.")
+
+    except Exception as error:
+        if connection:
+            connection.rollback()
+
+        print("GOOGLE AUTH ERROR:", repr(error), flush=True)
+        raise HTTPException(500, "Google login failed.")
+
+    finally:
+        if connection:
+            connection.close()
+
+
+@app.post("/auth/link-email")
+def link_email(
+    data: EmailRegisterRequest,
+    current_user: dict = Depends(get_authenticated_user)
+):
+    name = data.name.strip()
+    email = data.email.strip().lower()
+
+    if not name or "@" not in email:
+        raise HTTPException(400, "Enter a valid name and email.")
+
+    if len(data.password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters.")
+
+    connection = None
+
+    try:
+        connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            UPDATE app_users
+            SET name = %s,
+                email = %s,
+                password_hash = %s
+            WHERE user_id = %s
+              AND email IS NULL;
+        """, (
+            name,
+            email,
+            password_hash.hash(data.password),
+            current_user["user_id"]
+        ))
+
+        if cursor.rowcount == 0:
+            raise HTTPException(
+                409,
+                "Account already has an email or does not exist."
+            )
+
+        connection.commit()
+        cursor.close()
+
+        return {"status": "success", "message": "Account linked successfully."}
+
+    except HTTPException:
+        if connection:
+            connection.rollback()
+        raise
+
+    except psycopg2.errors.UniqueViolation:
+        if connection:
+            connection.rollback()
+        raise HTTPException(409, "Email already belongs to another account.")
+
+    except Exception as error:
+        if connection:
+            connection.rollback()
+
+        print("ACCOUNT LINK ERROR:", repr(error), flush=True)
+        raise HTTPException(500, "Account linking failed.")
+
+    finally:
+        if connection:
+            connection.close()
+        
 
 def reserve_credits(user_id, amount, quality):
     connection = None
