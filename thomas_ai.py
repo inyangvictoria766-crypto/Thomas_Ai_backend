@@ -1521,10 +1521,12 @@ async def upload_image(
 
         # SAVE GENERATION HISTORY
         record_generation(
-            current_user["user_id"],
-            quality,
-            provider
-        )
+    user_id,
+    quality,
+    provider,
+    reservation_id,
+    model
+)
 
         return {
             "image": generated_image,
