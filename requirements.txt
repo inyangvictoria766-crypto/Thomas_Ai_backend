@@ -8,3 +8,4 @@ Pillow
 openai
 cloudinary
 pwdlib[argon2]
+google-auth
