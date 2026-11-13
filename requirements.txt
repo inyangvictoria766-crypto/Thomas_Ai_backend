@@ -7,3 +7,4 @@ requests
 Pillow
 openai
 cloudinary
+pwdlib[argon2]
