@@ -1323,6 +1323,7 @@ async def upload_image(
 ):
     prompt = prompt.strip()
     quality = quality.lower().strip()
+    user_id = current_user["user_id"]
 
     # VALIDATE PROMPT
     if not prompt:
