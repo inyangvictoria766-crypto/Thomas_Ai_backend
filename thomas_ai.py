@@ -1216,7 +1216,7 @@ def generate_image(
     reservation_id,
     "@cf/black-forest-labs/flux-1-schnell"
         )
-        )
+        
 
         return {
             "image": image_data,
