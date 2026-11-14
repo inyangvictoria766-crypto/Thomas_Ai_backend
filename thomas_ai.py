@@ -841,8 +841,183 @@ def record_generation(
     finally:
         if connection:
             connection.close()
-            
- 
+
+
+
+def record_provider_topup(
+    provider,
+    amount_usd,
+    source_reference,
+    description=None
+):
+    connection = None
+
+    allowed_providers = {
+        "cloudflare",
+        "openai",
+        "higgsfield",
+        "luma"
+    }
+
+    if provider not in allowed_providers:
+        raise ValueError("Unsupported provider")
+
+    amount = Decimal(str(amount_usd))
+
+    if amount <= 0:
+        raise ValueError("Top-up amount must be positive")
+
+    if not source_reference:
+        raise ValueError("A unique top-up reference is required")
+
+    amount_minor = int(
+        (amount * Decimal("100000000")).quantize(
+            Decimal("1")
+        )
+    )
+
+    if amount_minor <= 0:
+        raise ValueError("Top-up amount is too small")
+
+    connection = psycopg2.connect(
+        os.getenv("DATABASE_URL")
+    )
+
+    try:
+        cursor = connection.cursor()
+
+        description = description or (
+            f"{provider} provider top-up"
+        )
+
+        cursor.execute("""
+            INSERT INTO provider_accounts (
+                provider,
+                currency,
+                balance_minor,
+                unit_scale
+            )
+            VALUES (%s, 'USD', 0, 100000000)
+            ON CONFLICT (provider)
+            DO NOTHING;
+        """, (provider,))
+
+        cursor.execute("""
+            INSERT INTO provider_transactions (
+                provider,
+                transaction_type,
+                amount_minor,
+                currency,
+                unit_scale,
+                source_reference,
+                description
+            )
+            VALUES (
+                %s,
+                'topup',
+                %s,
+                'USD',
+                100000000,
+                %s,
+                %s
+            )
+            ON CONFLICT (
+                provider,
+                transaction_type,
+                source_reference
+            )
+            WHERE source_reference IS NOT NULL
+            DO NOTHING
+            RETURNING id;
+        """, (
+            provider,
+            amount_minor,
+            source_reference,
+            description
+        ))
+
+        inserted = cursor.fetchone()
+
+        if inserted is None:
+            connection.rollback()
+            print("TOP-UP ALREADY RECORDED", flush=True)
+            return False
+
+        cursor.execute("""
+            UPDATE provider_accounts
+            SET
+                balance_minor = balance_minor + %s,
+                updated_at = NOW()
+            WHERE provider = %s
+              AND currency = 'USD';
+        """, (
+            amount_minor,
+            provider
+        ))
+
+        cursor.execute("""
+            INSERT INTO business_ledger (
+                entry_type,
+                direction,
+                amount_minor,
+                currency,
+                unit_scale,
+                source,
+                source_reference,
+                description,
+                metadata
+            )
+            VALUES (
+                'provider_topup',
+                'transfer',
+                %s,
+                'USD',
+                100000000,
+                'provider',
+                %s,
+                %s,
+                jsonb_build_object(
+                    'provider', %s
+                )
+            )
+            ON CONFLICT (
+                source,
+                source_reference,
+                entry_type
+            )
+            DO NOTHING;
+        """, (
+            amount_minor,
+            source_reference,
+            description,
+            provider
+        ))
+
+        connection.commit()
+
+        print(
+            "PROVIDER TOP-UP RECORDED:",
+            provider,
+            amount_usd,
+            flush=True
+        )
+
+        return True
+
+    except Exception as error:
+        connection.rollback()
+
+        print(
+            "PROVIDER TOP-UP ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise
+
+    finally:
+        connection.close()
+    
                     
         
                 
