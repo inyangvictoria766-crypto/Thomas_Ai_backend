@@ -1371,14 +1371,6 @@ def generate_image(
             flush=True
         )
 
-record_generation(
-    current_user["user_id"],
-    quality,
-    "cloudflare",
-    reservation_id,
-    "@cf/black-forest-labs/flux-1-schnell",
-    cloudflare_cost_usd
-)
 
         record_generation(
     current_user["user_id"],
