@@ -1438,6 +1438,54 @@ def get_provider_cost(provider, model, feature):
             connection.close()
             
 
+def get_cloudflare_editing_cost(width, height):
+    connection = psycopg2.connect(
+        os.getenv("DATABASE_URL")
+    )
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT feature, cost_per_unit, currency
+            FROM provider_pricing
+            WHERE provider = 'cloudflare'
+              AND model = '@cf/black-forest-labs/flux-2-klein-4b'
+              AND feature IN (
+                  'image_editing_input',
+                  'image_editing_output'
+              );
+        """)
+
+        rows = cursor.fetchall()
+
+        pricing = {
+            row[0]: (Decimal(str(row[1])), row[2])
+            for row in rows
+        }
+
+        input_price = pricing.get("image_editing_input")
+        output_price = pricing.get("image_editing_output")
+
+        if not input_price or not output_price:
+            raise ValueError("Image editing pricing is incomplete")
+
+        if input_price[1] != "USD" or output_price[1] != "USD":
+            raise ValueError("Unexpected pricing currency")
+
+        input_tiles = ((width + 511) // 512) * ((height + 511) // 512)
+        output_tiles = input_tiles
+
+        total = (
+            input_tiles * input_price[0] +
+            output_tiles * output_price[0]
+        )
+
+        return float(total)
+
+    finally:
+        connection.close()
+    
 def get_cloudflare_generation_cost(model, steps, tiles):
     connection = psycopg2.connect(
         os.getenv("DATABASE_URL")
