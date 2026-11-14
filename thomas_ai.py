@@ -2351,6 +2351,7 @@ class MotionTransferRequest(BaseModel):
     image_urls: list[str] = Field(min_length=1, max_length=8)
     prompt: str = ""
     resolution: Literal["480p", "720p", "1080p"] = "720p"
+    duration_seconds: int = Field(ge=1, le=5)
 
 
 @app.post("/motion-transfer")
