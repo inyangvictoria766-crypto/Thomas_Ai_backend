@@ -1436,7 +1436,53 @@ def get_provider_cost(provider, model, feature):
     finally:
         if connection:
             connection.close()
-    
+            
+
+def get_cloudflare_generation_cost(model, steps, tiles):
+    connection = psycopg2.connect(
+        os.getenv("DATABASE_URL")
+    )
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT feature, cost_per_unit, currency
+            FROM provider_pricing
+            WHERE provider = 'cloudflare'
+              AND model = %s
+              AND feature IN (
+                  'image_generation_step',
+                  'image_generation_tile'
+              );
+        """, (model,))
+
+        rows = cursor.fetchall()
+
+        pricing = {
+            row[0]: (Decimal(str(row[1])), row[2])
+            for row in rows
+        }
+
+        step_price = pricing.get("image_generation_step")
+        tile_price = pricing.get("image_generation_tile")
+
+        if not step_price or not tile_price:
+            raise ValueError("Cloudflare pricing is incomplete")
+
+        if step_price[1] != "USD" or tile_price[1] != "USD":
+            raise ValueError("Unexpected pricing currency")
+
+        total = (
+            tiles * step_price[0] +
+            steps * tile_price[0]
+        )
+
+        return float(total)
+
+    finally:
+        connection.close()
+
 # IMAGE GENERATION
 
 
