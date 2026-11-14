@@ -2637,15 +2637,16 @@ def financial_summary(
         )
         cursor = connection.cursor()
 
+        # Verify admin access
         cursor.execute("""
             SELECT is_admin
             FROM app_users
             WHERE user_id = %s;
         """, (current_user["user_id"],))
 
-        result = cursor.fetchone()
+        admin = cursor.fetchone()
 
-        if not result or not result[0]:
+        if not admin or not admin[0]:
             raise HTTPException(
                 status_code=403,
                 detail="Admin access required."
@@ -2653,43 +2654,75 @@ def financial_summary(
 
         cursor.execute("""
             SELECT
-                COALESCE(SUM(
-                    CASE WHEN entry_type = 'customer_payment'
-                    THEN amount_minor ELSE 0 END
-                ), 0),
-                COALESCE(SUM(
-                    CASE WHEN direction = 'expense'
-                    THEN amount_minor ELSE 0 END
-                ), 0),
-                COALESCE(SUM(
-                    CASE WHEN entry_type = 'refund'
-                    THEN amount_minor ELSE 0 END
-                ), 0)
-            FROM business_ledger
-            WHERE currency = 'NGN';
+                l.currency,
+                l.entry_type,
+                l.direction,
+                COALESCE(SUM(l.amount_minor), 0),
+                MAX(r.rate_to_usd),
+                MAX(l.unit_scale)
+            FROM business_ledger l
+            LEFT JOIN currency_rates r
+                ON r.currency = l.currency
+            GROUP BY
+                l.currency,
+                l.entry_type,
+                l.direction
+            ORDER BY l.currency, l.entry_type;
         """)
 
-        row = cursor.fetchone()
+        rows = cursor.fetchall()
+
+        totals = {}
+        revenue_usd = 0.0
+        expenses_usd = 0.0
+        missing_rates = []
+
+        for currency, entry_type, direction, amount, rate, scale in rows:
+            if not rate:
+                missing_rates.append(currency)
+                continue
+
+            if currency not in totals:
+                totals[currency] = {
+                    "revenue": 0,
+                    "expenses": 0,
+                    "refunds": 0
+                }
+
+            value = int(amount)
+
+            if entry_type == "customer_payment":
+                totals[currency]["revenue"] += value
+                revenue_usd += (value / scale) * float(rate)
+
+            elif direction == "expense":
+                totals[currency]["expenses"] += value
+                expenses_usd += (value / scale) * float(rate)
+
+            elif entry_type == "refund":
+                totals[currency]["refunds"] += value
 
         return {
-            "currency": "NGN",
-            "revenue_kobo": int(row[0]),
-            "expenses_kobo": int(row[1]),
-            "refunds_kobo": int(row[2]),
-            "net_profit_kobo": int(row[0] - row[1] - row[2])
+            "reporting_currency": "USD",
+            "currency_totals_minor": totals,
+            "revenue_usd": round(revenue_usd, 8),
+            "expenses_usd": round(expenses_usd, 8),
+            "net_profit_usd": round(
+                revenue_usd - expenses_usd, 8
+            ),
+            "missing_exchange_rates": list(set(missing_rates))
         }
 
     except HTTPException:
         raise
 
     except Exception as error:
-        print("FINANCIAL SUMMARY ERROR:", repr(error), flush=True)
+        print("FINANCIAL SUMMARY ERROR:", repr(error))
         raise HTTPException(
             status_code=500,
-            detail="Could not retrieve financial summary."
+            detail="Could not generate financial summary."
         )
 
     finally:
         if connection:
             connection.close()
-        
