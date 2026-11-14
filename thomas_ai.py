@@ -1349,7 +1349,8 @@ def generate_image(
     quality,
     "cloudflare",
     reservation_id,
-    "@cf/black-forest-labs/flux-1-schnell"
+    "@cf/black-forest-labs/flux-1-schnell",
+    0.0004224
         )
         
 
