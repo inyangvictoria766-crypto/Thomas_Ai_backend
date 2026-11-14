@@ -2624,8 +2624,11 @@ async def upload_template_video(file: UploadFile = File(...)):
         await file.close()
         
 
+
 @app.get("/admin/financial-summary")
-def financial_summary():
+def financial_summary(
+    current_user: dict = Depends(get_authenticated_user)
+):
     connection = None
 
     try:
@@ -2635,22 +2638,33 @@ def financial_summary():
         cursor = connection.cursor()
 
         cursor.execute("""
+            SELECT is_admin
+            FROM app_users
+            WHERE user_id = %s;
+        """, (current_user["user_id"],))
+
+        result = cursor.fetchone()
+
+        if not result or not result[0]:
+            raise HTTPException(
+                status_code=403,
+                detail="Admin access required."
+            )
+
+        cursor.execute("""
             SELECT
                 COALESCE(SUM(
                     CASE WHEN entry_type = 'customer_payment'
                     THEN amount_minor ELSE 0 END
-                ), 0) AS revenue,
-
+                ), 0),
                 COALESCE(SUM(
                     CASE WHEN direction = 'expense'
                     THEN amount_minor ELSE 0 END
-                ), 0) AS expenses,
-
+                ), 0),
                 COALESCE(SUM(
                     CASE WHEN entry_type = 'refund'
                     THEN amount_minor ELSE 0 END
-                ), 0) AS refunds
-
+                ), 0)
             FROM business_ledger
             WHERE currency = 'NGN';
         """)
@@ -2665,6 +2679,9 @@ def financial_summary():
             "net_profit_kobo": int(row[0] - row[1] - row[2])
         }
 
+    except HTTPException:
+        raise
+
     except Exception as error:
         print("FINANCIAL SUMMARY ERROR:", repr(error), flush=True)
         raise HTTPException(
@@ -2675,7 +2692,4 @@ def financial_summary():
     finally:
         if connection:
             connection.close()
-        
-
-        
         
