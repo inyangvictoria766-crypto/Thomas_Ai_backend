@@ -1591,6 +1591,11 @@ def generate_image(
             )
 
             image_data = response.data[0].b64_json
+            print(
+    "OPENAI IMAGE USAGE:",
+    response.usage,
+    flush=True
+                )
 
             if not image_data:
                 raise HTTPException(
