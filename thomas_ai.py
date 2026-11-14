@@ -2623,6 +2623,58 @@ async def upload_template_video(file: UploadFile = File(...)):
     finally:
         await file.close()
         
+
+@app.get("/admin/financial-summary")
+def financial_summary():
+    connection = None
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT
+                COALESCE(SUM(
+                    CASE WHEN entry_type = 'customer_payment'
+                    THEN amount_minor ELSE 0 END
+                ), 0) AS revenue,
+
+                COALESCE(SUM(
+                    CASE WHEN direction = 'expense'
+                    THEN amount_minor ELSE 0 END
+                ), 0) AS expenses,
+
+                COALESCE(SUM(
+                    CASE WHEN entry_type = 'refund'
+                    THEN amount_minor ELSE 0 END
+                ), 0) AS refunds
+
+            FROM business_ledger
+            WHERE currency = 'NGN';
+        """)
+
+        row = cursor.fetchone()
+
+        return {
+            "currency": "NGN",
+            "revenue_kobo": int(row[0]),
+            "expenses_kobo": int(row[1]),
+            "refunds_kobo": int(row[2]),
+            "net_profit_kobo": int(row[0] - row[1] - row[2])
+        }
+
+    except Exception as error:
+        print("FINANCIAL SUMMARY ERROR:", repr(error), flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not retrieve financial summary."
+        )
+
+    finally:
+        if connection:
+            connection.close()
         
 
         
