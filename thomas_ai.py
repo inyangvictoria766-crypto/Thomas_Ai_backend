@@ -1531,9 +1531,53 @@ def get_cloudflare_generation_cost(model, steps, tiles):
     finally:
         connection.close()
 
+
+
+def get_openai_image_cost(usage):
+    if not usage:
+        raise ValueError("OpenAI usage data is missing.")
+
+    connection = psycopg2.connect(
+        os.getenv("DATABASE_URL")
+    )
+
+    try:
+        with connection.cursor() as cur:
+            cur.execute("""
+                SELECT feature, cost_per_unit
+                FROM provider_pricing
+                WHERE provider = 'openai'
+                AND model = 'gpt-image-2.5-flare'
+            """)
+
+            pricing = {
+                row[0]: float(row[1])
+                for row in cur.fetchall()
+            }
+    finally:
+        connection.close()
+
+    required = {"text_input", "image_input", "image_output"}
+
+    if not required.issubset(pricing):
+        raise ValueError("OpenAI pricing records are incomplete.")
+
+    details = usage.input_tokens_details
+
+    text_tokens = details.text_tokens or 0
+    image_tokens = details.image_tokens or 0
+    output_tokens = usage.output_tokens or 0
+
+    cost = (
+        text_tokens * pricing["text_input"] +
+        image_tokens * pricing["image_input"] +
+        output_tokens * pricing["image_output"]
+    ) / 1_000_000
+
+    return cost
+    
+    
 # IMAGE GENERATION
-
-
 @app.post("/generate")
 def generate_image(
     request: ImageRequest,
@@ -1603,12 +1647,15 @@ def generate_image(
                     detail="OpenAI returned no image."
                 )
 
+            openai_cost = get_openai_image_cost(response.usage)
+
             record_generation(
     current_user["user_id"],
     quality,
     "openai",
     reservation_id,
-    "gpt-image-2.5-flare"
+    "gpt-image-2.5-flare",
+    openai_cost
             )
 
             return {
