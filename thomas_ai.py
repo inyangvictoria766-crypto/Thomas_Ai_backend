@@ -651,6 +651,7 @@ def refund_credits(user_id, reservation_id, quality):
 
 
 
+
 def record_generation(
     user_id,
     quality,
@@ -679,8 +680,13 @@ def record_generation(
 
         cursor.execute("""
             INSERT INTO generation_history (
-                user_id, quality, provider, status,
-                reservation_id, model, provider_cost_usd
+                user_id,
+                quality,
+                provider,
+                status,
+                reservation_id,
+                model,
+                provider_cost_usd
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s);
         """, (
@@ -703,10 +709,22 @@ def record_generation(
                     )
                 )
 
-                description = (
-                    f"{provider} usage: {model}"
-                )
+                description = f"{provider} usage: {model}"
 
+                # Ensure the provider account exists.
+                cursor.execute("""
+                    INSERT INTO provider_accounts (
+                        provider,
+                        currency,
+                        balance_minor,
+                        unit_scale
+                    )
+                    VALUES (%s, 'USD', 0, 100000000)
+                    ON CONFLICT (provider)
+                    DO NOTHING;
+                """, (provider,))
+
+                # Record usage only once.
                 cursor.execute("""
                     INSERT INTO provider_transactions (
                         provider,
@@ -718,8 +736,13 @@ def record_generation(
                         description
                     )
                     VALUES (
-                        %s, 'usage', %s, 'USD',
-                        100000000, %s, %s
+                        %s,
+                        'usage',
+                        %s,
+                        'USD',
+                        100000000,
+                        %s,
+                        %s
                     )
                     ON CONFLICT (
                         provider,
@@ -727,7 +750,8 @@ def record_generation(
                         source_reference
                     )
                     WHERE source_reference IS NOT NULL
-                    DO NOTHING;
+                    DO NOTHING
+                    RETURNING id;
                 """, (
                     provider,
                     cost_minor,
@@ -735,49 +759,73 @@ def record_generation(
                     description
                 ))
 
-                cursor.execute("""
-                    INSERT INTO business_ledger (
-                        entry_type,
-                        direction,
-                        amount_minor,
-                        currency,
-                        unit_scale,
-                        source,
-                        source_reference,
-                        description,
-                        metadata
-                    )
-                    VALUES (
-                        'provider_usage',
-                        'expense',
-                        %s,
-                        'USD',
-                        100000000,
-                        'provider',
-                        %s,
-                        %s,
-                        jsonb_build_object(
-                            'provider', %s,
-                            'model', %s,
-                            'user_id', %s
+                usage_inserted = cursor.fetchone() is not None
+
+                # Update balance only for a new usage transaction.
+                if usage_inserted:
+
+                    cursor.execute("""
+                        UPDATE provider_accounts
+                        SET
+                            balance_minor = balance_minor - %s,
+                            updated_at = NOW()
+                        WHERE provider = %s
+                          AND currency = 'USD';
+                    """, (
+                        cost_minor,
+                        provider
+                    ))
+
+                    # Record the expense in the business ledger.
+                    cursor.execute("""
+                        INSERT INTO business_ledger (
+                            entry_type,
+                            direction,
+                            amount_minor,
+                            currency,
+                            unit_scale,
+                            source,
+                            source_reference,
+                            description,
+                            metadata
                         )
-                    )
-                    ON CONFLICT (
-                        source,
-                        source_reference,
-                        entry_type
-                    )
-                    DO NOTHING;
-                """, (
-                    cost_minor,
-                    str(reservation_id),
-                    description,
-                    provider,
-                    model,
-                    str(user_id)
-                ))
+                        VALUES (
+                            'provider_usage',
+                            'expense',
+                            %s,
+                            'USD',
+                            100000000,
+                            'provider',
+                            %s,
+                            %s,
+                            jsonb_build_object(
+                                'provider', %s,
+                                'model', %s,
+                                'user_id', %s
+                            )
+                        )
+                        ON CONFLICT (
+                            source,
+                            source_reference,
+                            entry_type
+                        )
+                        DO NOTHING;
+                    """, (
+                        cost_minor,
+                        str(reservation_id),
+                        description,
+                        provider,
+                        model,
+                        str(user_id)
+                    ))
 
         connection.commit()
+
+        print(
+            "GENERATION ACCOUNTING SUCCESSFUL",
+            flush=True
+        )
+
         cursor.close()
 
     except Exception as error:
@@ -785,7 +833,7 @@ def record_generation(
             connection.rollback()
 
         print(
-            "GENERATION HISTORY ERROR:",
+            "GENERATION ACCOUNTING ERROR:",
             repr(error),
             flush=True
         )
@@ -793,6 +841,10 @@ def record_generation(
     finally:
         if connection:
             connection.close()
+            
+ 
+                    
+        
                 
 
         
