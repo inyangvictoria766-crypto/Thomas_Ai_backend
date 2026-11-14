@@ -12,7 +12,7 @@ import cloudinary
 import cloudinary.uploader
 from fastapi import UploadFile, File, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
+from decimal import Decimal
 from fastapi import Request
 from fastapi import Depends
 from openai import OpenAI
@@ -650,6 +650,7 @@ def refund_credits(user_id, reservation_id, quality):
 
 
 
+
 def record_generation(
     user_id,
     quality,
@@ -664,7 +665,6 @@ def record_generation(
         connection = psycopg2.connect(
             os.getenv("DATABASE_URL")
         )
-
         cursor = connection.cursor()
 
         print(
@@ -678,15 +678,9 @@ def record_generation(
         )
 
         cursor.execute("""
-            INSERT INTO generation_history
-            (
-                user_id,
-                quality,
-                provider,
-                status,
-                reservation_id,
-                model,
-                provider_cost_usd
+            INSERT INTO generation_history (
+                user_id, quality, provider, status,
+                reservation_id, model, provider_cost_usd
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s);
         """, (
@@ -698,6 +692,90 @@ def record_generation(
             model,
             provider_cost_usd
         ))
+
+        if provider_cost_usd is not None:
+            cost = Decimal(str(provider_cost_usd))
+
+            if cost > 0:
+                cost_minor = int(
+                    (cost * Decimal("100000000")).quantize(
+                        Decimal("1")
+                    )
+                )
+
+                description = (
+                    f"{provider} usage: {model}"
+                )
+
+                cursor.execute("""
+                    INSERT INTO provider_transactions (
+                        provider,
+                        transaction_type,
+                        amount_minor,
+                        currency,
+                        unit_scale,
+                        source_reference,
+                        description
+                    )
+                    VALUES (
+                        %s, 'usage', %s, 'USD',
+                        100000000, %s, %s
+                    )
+                    ON CONFLICT (
+                        provider,
+                        transaction_type,
+                        source_reference
+                    )
+                    WHERE source_reference IS NOT NULL
+                    DO NOTHING;
+                """, (
+                    provider,
+                    cost_minor,
+                    str(reservation_id),
+                    description
+                ))
+
+                cursor.execute("""
+                    INSERT INTO business_ledger (
+                        entry_type,
+                        direction,
+                        amount_minor,
+                        currency,
+                        unit_scale,
+                        source,
+                        source_reference,
+                        description,
+                        metadata
+                    )
+                    VALUES (
+                        'provider_usage',
+                        'expense',
+                        %s,
+                        'USD',
+                        100000000,
+                        'provider',
+                        %s,
+                        %s,
+                        jsonb_build_object(
+                            'provider', %s,
+                            'model', %s,
+                            'user_id', %s
+                        )
+                    )
+                    ON CONFLICT (
+                        source,
+                        source_reference,
+                        entry_type
+                    )
+                    DO NOTHING;
+                """, (
+                    cost_minor,
+                    str(reservation_id),
+                    description,
+                    provider,
+                    model,
+                    str(user_id)
+                ))
 
         connection.commit()
         cursor.close()
@@ -715,6 +793,8 @@ def record_generation(
     finally:
         if connection:
             connection.close()
+                
+
         
             
 # HOME ROUTE
