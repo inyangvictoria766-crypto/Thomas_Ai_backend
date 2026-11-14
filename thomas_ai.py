@@ -1360,9 +1360,10 @@ def generate_image(
         cloudflare_tiles = 4
 
         cloudflare_cost_usd = (
-        cloudflare_tiles * 0.0000528 +
-        cloudflare_steps * 0.0001056
-    )
+            cloudflare_tiles * 0.0000528 +
+            cloudflare_steps * 0.0001056
+        )
+
         total_seconds = time.perf_counter() - request_started
 
         print(
@@ -1370,13 +1371,14 @@ def generate_image(
             flush=True
         )
 
-        
-
-        cloudflare_cost_usd = get_provider_cost(
-        "cloudflare",
-        "@cf/black-forest-labs/flux-1-schnell",
-        "image_generation"
-    )
+record_generation(
+    current_user["user_id"],
+    quality,
+    "cloudflare",
+    reservation_id,
+    "@cf/black-forest-labs/flux-1-schnell",
+    cloudflare_cost_usd
+)
 
         record_generation(
     current_user["user_id"],
