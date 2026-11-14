@@ -1633,9 +1633,10 @@ def generate_image(
         cloudflare_steps = 4
         cloudflare_tiles = 4
 
-        cloudflare_cost_usd = (
-            cloudflare_tiles * 0.0000528 +
-            cloudflare_steps * 0.0001056
+        cloudflare_cost_usd = get_cloudflare_generation_cost(
+            model="@cf/black-forest-labs/flux-1-schnell",
+            steps=cloudflare_steps,
+            tiles=cloudflare_tiles
         )
 
         total_seconds = time.perf_counter() - request_started
