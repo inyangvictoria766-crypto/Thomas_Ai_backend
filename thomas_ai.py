@@ -1342,18 +1342,14 @@ def generate_image(
             flush=True
         )
 
-        cloudflare_cost_usd = (
-            (4 * 0.0000528) +
-            (4 * 0.0001056)
-        )
+        
 
         record_generation(
-          current_user["user_id"],
-            quality,
-          "cloudflare",
-           reservation_id,
-          "@cf/black-forest-labs/flux-1-schnell",
-          cloudflare_cost_usd
+    current_user["user_id"],
+    quality,
+    "cloudflare",
+    reservation_id,
+    "@cf/black-forest-labs/flux-1-schnell"
         )
         
 
