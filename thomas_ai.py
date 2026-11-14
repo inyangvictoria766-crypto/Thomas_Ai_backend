@@ -23,6 +23,7 @@ from pwdlib import PasswordHash
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from pydantic import EmailStr
+from pydantic import BaseModel
 password_hash = PasswordHash.recommended()
 
 
@@ -2947,3 +2948,94 @@ def financial_summary(
     finally:
         if connection:
             connection.close()
+            
+class ProviderTopupRequest(BaseModel):
+    provider: str
+    amount_usd: Decimal
+    source_reference: str
+    description: str | None = None
+
+@app.post("/admin/provider-topup")
+def admin_provider_topup(
+    request: ProviderTopupRequest,
+    current_user: dict = Depends(get_authenticated_user)
+):
+    connection = None
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+        cursor = connection.cursor()
+
+        # Verify admin access
+        cursor.execute("""
+            SELECT is_admin
+            FROM app_users
+            WHERE user_id = %s;
+        """, (current_user["user_id"],))
+
+        admin = cursor.fetchone()
+
+        if not admin or not admin[0]:
+            raise HTTPException(
+                status_code=403,
+                detail="Admin access required."
+            )
+
+        cursor.close()
+        connection.close()
+        connection = None
+
+        if not request.source_reference.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Funding reference is required."
+            )
+
+        try:
+            recorded = record_provider_topup(
+                provider=request.provider,
+                amount_usd=request.amount_usd,
+                source_reference=request.source_reference.strip(),
+                description=request.description
+            )
+
+        except ValueError as error:
+            raise HTTPException(
+                status_code=400,
+                detail=str(error)
+            )
+
+        if not recorded:
+            return {
+                "status": "duplicate",
+                "message": "This provider top-up was already recorded."
+            }
+
+        return {
+            "status": "success",
+            "provider": request.provider,
+            "amount_usd": str(request.amount_usd),
+            "message": "Provider top-up recorded successfully."
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "PROVIDER TOP-UP ENDPOINT ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Could not record provider top-up."
+        )
+
+    finally:
+        if connection:
+            connection.close()
+    
