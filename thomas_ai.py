@@ -1982,13 +1982,19 @@ async def upload_image(
             )
 
         # SAVE GENERATION HISTORY
+        cloudflare_editing_cost = get_cloudflare_editing_cost(
+        width,
+        height
+      )
+
         record_generation(
-    user_id,
-    quality,
-    provider,
-    reservation_id,
-    model
-)
+          user_id,
+          quality,
+          provider,
+          reservation_id,
+           model,
+            cloudflare_editing_cost
+       )
 
         return {
             "image": generated_image,
