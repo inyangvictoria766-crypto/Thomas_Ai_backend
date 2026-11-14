@@ -1036,6 +1036,39 @@ async def paystack_webhook(request: Request):
                 paid_at = NOW()
             WHERE reference = %s;
         """, (reference,))
+        cursor.execute("""
+    INSERT INTO business_ledger (
+        entry_type,
+        direction,
+        amount_minor,
+        currency,
+        unit_scale,
+        source,
+        source_reference,
+        description,
+        metadata
+    )
+    VALUES (
+        'customer_payment',
+        'income',
+        %s,
+        'NGN',
+        100,
+        'paystack',
+        %s,
+        %s,
+        jsonb_build_object(
+            'user_id', %s,
+            'credits', %s
+        )
+    );
+""", (
+    expected_amount,
+    reference,
+    f"Paystack credit purchase: {credits} credits",
+    str(user_id),
+    credits
+))
 
         connection.commit()
 
