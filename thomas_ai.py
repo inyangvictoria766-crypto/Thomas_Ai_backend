@@ -2951,10 +2951,10 @@ def financial_summary(
             
 class ProviderTopupRequest(BaseModel):
     provider: str
-    amount_usd: Decimal
+    amount_usd: Decimal = Field(gt=0)
     source_reference: str
     description: str | None = None
-
+    
 @app.post("/admin/provider-topup")
 def admin_provider_topup(
     request: ProviderTopupRequest,
