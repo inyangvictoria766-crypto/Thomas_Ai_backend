@@ -1180,6 +1180,34 @@ async def paystack_webhook(request: Request):
 class ImageRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=1000)
     quality: str = "low"
+
+def get_provider_cost(provider, model, feature):
+    connection = None
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT cost_per_unit
+            FROM provider_pricing
+            WHERE provider = %s
+              AND model = %s
+              AND feature = %s
+        """, (provider, model, feature))
+
+        result = cursor.fetchone()
+
+        if not result:
+            raise ValueError("Provider pricing not configured.")
+
+        return float(result[0])
+
+    finally:
+        if connection:
+            connection.close()
     
 # IMAGE GENERATION
 
@@ -1344,14 +1372,20 @@ def generate_image(
 
         
 
+        cloudflare_cost_usd = get_provider_cost(
+        "cloudflare",
+        "@cf/black-forest-labs/flux-1-schnell",
+        "image_generation"
+    )
+
         record_generation(
     current_user["user_id"],
     quality,
     "cloudflare",
     reservation_id,
     "@cf/black-forest-labs/flux-1-schnell",
-    0.0004224
-        )
+    cloudflare_cost_usd
+)
         
 
         return {
