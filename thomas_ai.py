@@ -30,6 +30,7 @@ password_hash = PasswordHash.recommended()
 
 
 app = FastAPI(title="Thomas AI Backend")
+print("THOMAS AI: REACHED FASTAPI INITIALIZATION", flush=True)
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
