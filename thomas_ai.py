@@ -655,6 +655,7 @@ def refund_credits(user_id, reservation_id, quality):
 
 
 
+
 def record_generation(
     user_id,
     quality,
@@ -680,38 +681,41 @@ def record_generation(
             model,
             flush=True
         )
-        
+
         cursor.execute("""
-    INSERT INTO generation_history (
-        user_id,
-        quality,
-        provider,
-        status,
-        reservation_id,
-        model,
-        provider_cost_usd
-    )
-    VALUES (%s, %s, %s, %s, %s, %s, %s)
-    ON CONFLICT (reservation_id)
-    WHERE reservation_id IS NOT NULL
-    DO NOTHING
-    RETURNING id;
-""", (
-    user_id,
-    quality,
-    provider,
-    "success",
-    reservation_id,
-    model,
-    provider_cost_usd
-))
+            INSERT INTO generation_history (
+                user_id,
+                quality,
+                provider,
+                status,
+                reservation_id,
+                model,
+                provider_cost_usd
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (reservation_id)
+            WHERE reservation_id IS NOT NULL
+            DO NOTHING
+            RETURNING id;
+        """, (
+            user_id,
+            quality,
+            provider,
+            "success",
+            reservation_id,
+            model,
+            provider_cost_usd
+        ))
 
-history_inserted = cursor.fetchone() is not None
+        history_inserted = cursor.fetchone() is not None
 
-if not history_inserted:
-    connection.rollback()
-    print("DUPLICATE GENERATION: accounting skipped", flush=True)
-    return
+        if not history_inserted:
+            connection.rollback()
+            print(
+                "DUPLICATE GENERATION: accounting skipped",
+                flush=True
+            )
+            return
 
         if provider_cost_usd is not None:
             cost = Decimal(str(provider_cost_usd))
@@ -725,7 +729,6 @@ if not history_inserted:
 
                 description = f"{provider} usage: {model}"
 
-                # Ensure the provider account exists.
                 cursor.execute("""
                     INSERT INTO provider_accounts (
                         provider,
@@ -738,7 +741,6 @@ if not history_inserted:
                     DO NOTHING;
                 """, (provider,))
 
-                # Record usage only once.
                 cursor.execute("""
                     INSERT INTO provider_transactions (
                         provider,
@@ -775,9 +777,7 @@ if not history_inserted:
 
                 usage_inserted = cursor.fetchone() is not None
 
-                # Update balance only for a new usage transaction.
                 if usage_inserted:
-
                     cursor.execute("""
                         UPDATE provider_accounts
                         SET
@@ -785,12 +785,8 @@ if not history_inserted:
                             updated_at = NOW()
                         WHERE provider = %s
                           AND currency = 'USD';
-                    """, (
-                        cost_minor,
-                        provider
-                    ))
+                    """, (cost_minor, provider))
 
-                    # Record the expense in the business ledger.
                     cursor.execute("""
                         INSERT INTO business_ledger (
                             entry_type,
@@ -855,6 +851,9 @@ if not history_inserted:
     finally:
         if connection:
             connection.close()
+
+
+
 
 
 
