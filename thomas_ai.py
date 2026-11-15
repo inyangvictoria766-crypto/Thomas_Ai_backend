@@ -16,6 +16,8 @@ from decimal import Decimal
 from fastapi import Request
 from fastapi import Depends
 from openai import OpenAI
+import openai
+print("OPENAI SDK VERSION:", openai.__version__, flush=True)
 from PIL import Image
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel, Field
