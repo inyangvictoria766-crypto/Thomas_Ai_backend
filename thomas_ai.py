@@ -1539,9 +1539,7 @@ def get_openai_image_cost(usage, model):
     if not usage:
         raise ValueError("OpenAI usage data is missing.")
 
-    connection = psycopg2.connect(
-        os.getenv("DATABASE_URL")
-    )
+    connection = psycopg2.connect(os.getenv("DATABASE_URL"))
 
     try:
         with connection.cursor() as cur:
@@ -1559,30 +1557,26 @@ def get_openai_image_cost(usage, model):
     finally:
         connection.close()
 
-    required = {
-        "text_input",
-        "image_input",
-        "image_output"
-    }
+    required = {"text_input", "image_input", "image_output"}
 
     if not required.issubset(pricing):
-        raise ValueError(
-            f"OpenAI pricing records are incomplete for {model}."
-        )
+        raise ValueError("OpenAI pricing records are incomplete.")
 
     details = usage.input_tokens_details
+    output_details = getattr(usage, "output_tokens_details", None)
+
+    if output_details is None or output_details.image_tokens is None:
+        raise ValueError("OpenAI image output usage is unavailable.")
 
     text_tokens = details.text_tokens or 0
     image_tokens = details.image_tokens or 0
-    output_tokens = usage.output_tokens or 0
+    output_tokens = output_details.image_tokens
 
-    cost = (
+    return (
         text_tokens * pricing["text_input"] +
         image_tokens * pricing["image_input"] +
         output_tokens * pricing["image_output"]
     ) / 1_000_000
-
-    return cost
     
 # IMAGE GENERATION
 @app.post("/generate")
