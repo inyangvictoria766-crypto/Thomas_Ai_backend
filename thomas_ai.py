@@ -1947,10 +1947,11 @@ async def upload_image(
             provider = "openai"
             model = "gpt-image-2.5-sunburst"
 
-            openai_cost = get_openai_image_cost(
-    result.usage,
-    model
-                )
+            try:
+                openai_cost = get_openai_image_cost(result.usage, model)
+            except Exception as error:
+                print("OPENAI EDIT COST ERROR:", repr(error), flush=True)
+                openai_cost = None
 
         # LOW AND MEDIUM: CLOUDFLARE
         else:
