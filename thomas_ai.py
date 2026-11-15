@@ -1648,10 +1648,14 @@ def generate_image(
                     detail="OpenAI returned no image."
                 )
 
-            openai_cost = get_openai_image_cost(
-    response.usage,
-    "gpt-image-2.5-flare"
+            try:
+                openai_cost = get_openai_image_cost(
+                response.usage,
+                "gpt-image-2.5-flare"
             )
+            except Exception as error:
+                print("OPENAI COST ERROR:", repr(error), flush=True)
+                openai_cost = None
             record_generation(
     current_user["user_id"],
     quality,
