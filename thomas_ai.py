@@ -1928,6 +1928,7 @@ async def upload_image(
                 prompt=prompt,
                 quality="high"
             )
+            print("OPENAI USAGE STRUCTURE:", result.usage.model_dump(), flush=True)
 
             if not result.data or not result.data[0].b64_json:
                 raise HTTPException(
