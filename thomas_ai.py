@@ -1533,7 +1533,7 @@ def get_cloudflare_generation_cost(model, steps, tiles):
 
 
 
-def get_openai_image_cost(usage):
+def get_openai_image_cost(usage, model):
     if not usage:
         raise ValueError("OpenAI usage data is missing.")
 
@@ -1547,8 +1547,8 @@ def get_openai_image_cost(usage):
                 SELECT feature, cost_per_unit
                 FROM provider_pricing
                 WHERE provider = 'openai'
-                AND model = 'gpt-image-2.5-flare'
-            """)
+                AND model = %s
+            """, (model,))
 
             pricing = {
                 row[0]: float(row[1])
@@ -1557,10 +1557,16 @@ def get_openai_image_cost(usage):
     finally:
         connection.close()
 
-    required = {"text_input", "image_input", "image_output"}
+    required = {
+        "text_input",
+        "image_input",
+        "image_output"
+    }
 
     if not required.issubset(pricing):
-        raise ValueError("OpenAI pricing records are incomplete.")
+        raise ValueError(
+            f"OpenAI pricing records are incomplete for {model}."
+        )
 
     details = usage.input_tokens_details
 
@@ -1575,7 +1581,6 @@ def get_openai_image_cost(usage):
     ) / 1_000_000
 
     return cost
-    
     
 # IMAGE GENERATION
 @app.post("/generate")
@@ -1647,8 +1652,10 @@ def generate_image(
                     detail="OpenAI returned no image."
                 )
 
-            openai_cost = get_openai_image_cost(response.usage)
-
+            openai_cost = get_openai_image_cost(
+    response.usage,
+    "gpt-image-2.5-flare"
+            )
             record_generation(
     current_user["user_id"],
     quality,
@@ -1938,6 +1945,12 @@ async def upload_image(
 
             generated_image = result.data[0].b64_json
             provider = "openai"
+            model = "gpt-image-2.5-sunburst"
+
+            openai_cost = get_openai_image_cost(
+    result.usage,
+    model
+                )
 
         # LOW AND MEDIUM: CLOUDFLARE
         else:
@@ -2034,21 +2047,25 @@ async def upload_image(
                 detail="The model returned no image."
             )
 
-        # SAVE GENERATION HISTORY
-        cloudflare_editing_cost = get_cloudflare_editing_cost(
-        width,
-        height
-      )
+          # SAVE GENERATION HISTORY
+
+        if provider == "openai":
+            provider_cost = openai_cost
+
+        else:
+            provider_cost = get_cloudflare_editing_cost(
+                width,
+                height
+            )
 
         record_generation(
-          user_id,
-          quality,
-          provider,
-          reservation_id,
-           model,
-            cloudflare_editing_cost
-       )
-
+            user_id,
+            quality,
+            provider,
+            reservation_id,
+            model,
+            provider_cost
+        )
         return {
             "image": generated_image,
             "status": "success",
