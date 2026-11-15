@@ -680,27 +680,38 @@ def record_generation(
             model,
             flush=True
         )
-
+        
         cursor.execute("""
-            INSERT INTO generation_history (
-                user_id,
-                quality,
-                provider,
-                status,
-                reservation_id,
-                model,
-                provider_cost_usd
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s);
-        """, (
-            user_id,
-            quality,
-            provider,
-            "success",
-            reservation_id,
-            model,
-            provider_cost_usd
-        ))
+    INSERT INTO generation_history (
+        user_id,
+        quality,
+        provider,
+        status,
+        reservation_id,
+        model,
+        provider_cost_usd
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (reservation_id)
+    WHERE reservation_id IS NOT NULL
+    DO NOTHING
+    RETURNING id;
+""", (
+    user_id,
+    quality,
+    provider,
+    "success",
+    reservation_id,
+    model,
+    provider_cost_usd
+))
+
+history_inserted = cursor.fetchone() is not None
+
+if not history_inserted:
+    connection.rollback()
+    print("DUPLICATE GENERATION: accounting skipped", flush=True)
+    return
 
         if provider_cost_usd is not None:
             cost = Decimal(str(provider_cost_usd))
