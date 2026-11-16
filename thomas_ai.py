@@ -3541,4 +3541,48 @@ def admin_provider_funding_report(
         if connection:
             connection.close()
 
+@app.get("/admin/provider-allocations")
+def admin_provider_allocations(
+    current_user: dict = Depends(get_authenticated_user)
+):
+    connection = None
+
+    try:
+        connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT is_admin
+            FROM app_users
+            WHERE user_id = %s;
+        """, (current_user["user_id"],))
+
+        admin = cursor.fetchone()
+        cursor.close()
+
+        if not admin or not admin[0]:
+            raise HTTPException(
+                status_code=403,
+                detail="Admin access required."
+            )
+
+        report = get_provider_funding_report()
+
+        return calculate_provider_allocations(report)
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print("PROVIDER ALLOCATION ERROR:", repr(error), flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not calculate provider allocations."
+        )
+
+    finally:
+        if connection:
+            connection.close()
+
+
     
