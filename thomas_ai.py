@@ -1429,6 +1429,7 @@ def get_provider_funding_report():
         )
         
 
+        
         report["funding_calculation"] = {
             "currency": "NGN",
             "confirmed_revenue_minor": revenue_minor,
@@ -1436,11 +1437,12 @@ def get_provider_funding_report():
             "payment_fees_minor": payment_fees_minor,
             "refunds_minor": refunds_minor,
             "hosting_costs_minor": hosting_minor,
-            ),
-            "available_before_provider_and_operating_costs_naira": (
-                round(available_minor / 100, 2)
+            "available_before_provider_and_operating_costs_minor": available_minor,
+            "available_before_provider_and_operating_costs_naira": round(
+                available_minor / 100, 2
             )
         }
+        
 
         report["safe_to_fund"] = False
 
