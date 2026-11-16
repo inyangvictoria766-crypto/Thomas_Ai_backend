@@ -1363,10 +1363,16 @@ def get_provider_funding_report():
                 report["confirmed_customer_revenue"][currency] = amount
 
             elif entry_type == "payment_fee":
-                report["recorded_payment_fees"][currency] = amount
-
+                report["recorded_payment_fees"][currency] = (
+                report["recorded_payment_fees"].get(currency, 0)
+                + amount
+                )
+                
             elif entry_type == "refund":
-                report["recorded_refunds"][currency] = amount
+                report["recorded_refunds"][currency] = (
+                report["recorded_refunds"].get(currency, 0)
+                + amount
+               )
 
             elif entry_type == "provider_usage":
                 report["provider_usage"][currency] = amount
@@ -1561,6 +1567,16 @@ async def paystack_webhook(request: Request):
 
         verification = verification_response.json()
         verified_payment = verification.get("data") or {}
+        paystack_fee_minor = verified_payment.get("fees")
+        
+        if paystack_fee_minor is not None:
+            paystack_fee_minor = int(paystack_fee_minor)
+
+            if paystack_fee_minor < 0:
+                raise HTTPException(
+                   status_code=400,
+                  detail="Invalid Paystack fee."
+        )
         verified_metadata = verified_payment.get("metadata") or {}
 
         if (
@@ -1671,8 +1687,45 @@ async def paystack_webhook(request: Request):
     str(user_id),
     credits
 ))
-
+        if paystack_fee_minor is not None and paystack_fee_minor > 0:
+            cursor.execute("""
+                INSERT INTO business_ledger (
+                    entry_type,
+                    direction,
+                    amount_minor,
+                    currency,
+                    unit_scale,
+                    source,
+                    source_reference,
+                    description,
+                    metadata
+                )
+                VALUES (
+                    'payment_fee',
+                    'expense',
+                    %s,
+                    'NGN',
+                    100,
+                    'paystack',
+                    %s,
+                    'Paystack transaction fee',
+                    jsonb_build_object(
+                        'user_id', %s
+                    )
+                )
+                ON CONFLICT (
+                    source,
+                    source_reference,
+                    entry_type
+                )
+                DO NOTHING;
+            """, (
+                paystack_fee_minor,
+                reference,
+                str(user_id)
+            ))
         connection.commit()
+        
 
         return {
             "status": "success",
