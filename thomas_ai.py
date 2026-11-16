@@ -1410,12 +1410,21 @@ def get_provider_funding_report():
             "recorded_refunds"
         ].get("NGN", 0)
 
+        hosting_minor = sum(
+        amount
+            for currency, entry_type, direction, amount in ledger_rows
+            if currency == "NGN"
+            and entry_type == "hosting"
+            and direction == "expense"
+)
+
         available_minor = max(
-            0,
-            revenue_minor
+                    0,
+           revenue_minor
             - credit_reserve_minor
             - payment_fees_minor
             - refunds_minor
+            - hosting_minor
         )
 
         report["funding_calculation"] = {
