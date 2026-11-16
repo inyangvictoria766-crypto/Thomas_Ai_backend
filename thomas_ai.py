@@ -1257,6 +1257,32 @@ def get_provider_funding_report():
         """)
 
         credit_row = cursor.fetchone()
+        
+        # 2B. Calculate average purchase value per credit
+        cursor.execute("""
+            SELECT
+                COALESCE(SUM(amount), 0),
+                COALESCE(SUM(credits), 0)
+            FROM payment_transactions
+            WHERE status = 'successful';
+        """)
+
+        purchase_row = cursor.fetchone()
+
+        total_purchased_amount = int(purchase_row[0])
+        total_purchased_credits = int(purchase_row[1])
+
+        outstanding_credits = int(credit_row[2])
+
+        estimated_credit_reserve_minor = 0
+
+        if total_purchased_credits > 0:
+            estimated_credit_reserve_minor = round(
+                total_purchased_amount
+                * outstanding_credits
+                / total_purchased_credits
+            )
+            
 
         # 3. Provider costs, separated by provider
         cursor.execute("""
@@ -1288,6 +1314,16 @@ def get_provider_funding_report():
                 "users_with_credits": credit_row[1],
                 "outstanding_credits": credit_row[2]
             },
+            "estimated_customer_credit_reserve": {
+            "currency": "NGN",
+            "amount_minor": estimated_credit_reserve_minor,
+            "amount_naira": round(
+             estimated_credit_reserve_minor / 100, 2
+             ),
+             "basis": "Average successful purchase value per credit",
+             "is_estimate": True
+            },
+            
             "other_entries": [],
             "safe_to_fund": False,
             "note": (
