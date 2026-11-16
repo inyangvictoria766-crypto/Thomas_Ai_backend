@@ -1384,7 +1384,6 @@ def get_provider_funding_report():
 
             if provider not in report["provider_activity_by_provider"]:
                 report["provider_activity_by_provider"][provider] = []
-
             report["provider_activity_by_provider"][provider].append({
                 "transaction_type": transaction_type,
                 "currency": currency,
@@ -1427,7 +1426,7 @@ def get_provider_funding_report():
             - credit_reserve_minor
             - payment_fees_minor
             - refunds_minor
-            - hosting_minor
+            - operating_expenses_minor
         )
         
 
@@ -1438,7 +1437,7 @@ def get_provider_funding_report():
             "customer_reserve_minor": credit_reserve_minor,
             "payment_fees_minor": payment_fees_minor,
             "refunds_minor": refunds_minor,
-            "hosting_costs_minor": hosting_minor,
+            "operating_expenses_minor": operating_expenses_minor,
             "available_before_provider_and_operating_costs_minor": available_minor,
             "available_before_provider_and_operating_costs_naira": round(
                 available_minor / 100, 2
