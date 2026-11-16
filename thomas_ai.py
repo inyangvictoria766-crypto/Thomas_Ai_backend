@@ -1406,26 +1406,28 @@ def get_provider_funding_report():
             "recorded_payment_fees"
         ].get("NGN", 0)
 
+        
         refunds_minor = report[
             "recorded_refunds"
         ].get("NGN", 0)
 
         hosting_minor = sum(
-        amount
+            int(amount)
             for currency, entry_type, direction, amount in ledger_rows
             if currency == "NGN"
             and entry_type == "hosting"
             and direction == "expense"
-)
+        )
 
         available_minor = max(
-                    0,
-           revenue_minor
+            0,
+            revenue_minor
             - credit_reserve_minor
             - payment_fees_minor
             - refunds_minor
             - hosting_minor
         )
+        
 
         report["funding_calculation"] = {
             "currency": "NGN",
@@ -1435,6 +1437,7 @@ def get_provider_funding_report():
             "refunds_minor": refunds_minor,
             "available_before_provider_and_operating_costs_minor": (
                 available_minor
+            "hosting_costs_minor": hosting_minor,
             ),
             "available_before_provider_and_operating_costs_naira": (
                 round(available_minor / 100, 2)
