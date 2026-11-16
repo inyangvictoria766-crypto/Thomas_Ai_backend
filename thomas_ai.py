@@ -3301,4 +3301,56 @@ def admin_provider_topup(
     finally:
         if connection:
             connection.close()
+
+@app.get("/admin/provider-funding-report")
+def admin_provider_funding_report(
+    current_user: dict = Depends(get_authenticated_user)
+):
+    connection = None
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT is_admin
+            FROM app_users
+            WHERE user_id = %s;
+        """, (current_user["user_id"],))
+
+        admin = cursor.fetchone()
+
+        cursor.close()
+        connection.close()
+        connection = None
+
+        if not admin or not admin[0]:
+            raise HTTPException(
+                status_code=403,
+                detail="Admin access required."
+            )
+
+        return get_provider_funding_report()
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "PROVIDER FUNDING REPORT ENDPOINT ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Could not generate provider funding report."
+        )
+
+    finally:
+        if connection:
+            connection.close()
+
     
