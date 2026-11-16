@@ -1223,6 +1223,7 @@ import psycopg2
 
 
 
+
 def get_provider_funding_report():
     connection = None
 
@@ -1230,10 +1231,9 @@ def get_provider_funding_report():
         connection = psycopg2.connect(
             os.getenv("DATABASE_URL")
         )
-
         cursor = connection.cursor()
 
-        # 1. Read business ledger
+        # 1. Customer revenue and business ledger
         cursor.execute("""
             SELECT
                 currency,
@@ -1245,50 +1245,62 @@ def get_provider_funding_report():
             ORDER BY currency, entry_type;
         """)
 
-        rows = cursor.fetchall()
+        ledger_rows = cursor.fetchall()
 
-        # 2. Read outstanding customer credits
+        # 2. Outstanding customer credits
         cursor.execute("""
             SELECT
-                COUNT(*) AS total_users,
-                COUNT(*) FILTER (
-                    WHERE credits > 0
-                ) AS users_with_credits,
-                COALESCE(
-                    SUM(GREATEST(credits, 0)), 0
-                ) AS outstanding_customer_credits
+                COUNT(*),
+                COUNT(*) FILTER (WHERE credits > 0),
+                COALESCE(SUM(GREATEST(credits, 0)), 0)
             FROM app_users;
         """)
 
         credit_row = cursor.fetchone()
 
-        # 3. Build report
+        # 3. Provider costs, separated by provider
+        cursor.execute("""
+            SELECT
+                provider,
+                transaction_type,
+                currency,
+                unit_scale,
+                COALESCE(SUM(amount_minor), 0)
+            FROM provider_transactions
+            GROUP BY
+                provider,
+                transaction_type,
+                currency,
+                unit_scale
+            ORDER BY provider, transaction_type;
+        """)
+
+        provider_rows = cursor.fetchall()
+
         report = {
             "confirmed_customer_revenue": {},
             "recorded_payment_fees": {},
             "recorded_refunds": {},
             "provider_usage": {},
-
+            "provider_activity_by_provider": {},
             "customer_credit_obligations": {
                 "total_users": credit_row[0],
                 "users_with_credits": credit_row[1],
                 "outstanding_credits": credit_row[2]
             },
-
             "other_entries": [],
             "safe_to_fund": False,
-
             "note": (
-                "Read-only financial report. "
-                "Outstanding credits are not yet converted "
-                "into a monetary liability. Other operating "
-                "costs and provider billing requirements "
-                "must also be accounted for."
+                "Read-only report. Provider transaction "
+                "records are internal accounting records, "
+                "not proof of external provider payments. "
+                "Customer obligations and operating expenses "
+                "must be calculated before funding."
             )
         }
 
         # 4. Categorize ledger entries
-        for currency, entry_type, direction, amount in rows:
+        for currency, entry_type, direction, amount in ledger_rows:
             amount = int(amount)
 
             if entry_type == "customer_payment" and direction == "income":
@@ -1311,6 +1323,19 @@ def get_provider_funding_report():
                     "amount_minor": amount
                 })
 
+        # 5. Separate provider transactions
+        for provider, transaction_type, currency, unit_scale, amount in provider_rows:
+
+            if provider not in report["provider_activity_by_provider"]:
+                report["provider_activity_by_provider"][provider] = []
+
+            report["provider_activity_by_provider"][provider].append({
+                "transaction_type": transaction_type,
+                "currency": currency,
+                "amount_minor": int(amount),
+                "unit_scale": int(unit_scale)
+            })
+
         cursor.close()
 
         return report
@@ -1326,6 +1351,7 @@ def get_provider_funding_report():
     finally:
         if connection:
             connection.close()
+
     
 @app.post("/paystack-webhook")
 async def paystack_webhook(request: Request):
