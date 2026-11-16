@@ -1435,8 +1435,6 @@ def get_provider_funding_report():
             "customer_reserve_minor": credit_reserve_minor,
             "payment_fees_minor": payment_fees_minor,
             "refunds_minor": refunds_minor,
-            "available_before_provider_and_operating_costs_minor": (
-                available_minor
             "hosting_costs_minor": hosting_minor,
             ),
             "available_before_provider_and_operating_costs_naira": (
