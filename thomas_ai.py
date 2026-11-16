@@ -57,6 +57,26 @@ CREDIT_PACKAGES = {
     }
 }
 
+PROVIDER_FUNDING_CONFIG = {
+    "enabled": True,
+    "reserve_currency": "NGN",
+    "provider_currency": "USD",
+
+    # Set this to the actual rate when funding USD.
+    # None means USD allocations remain paused.
+    "usd_to_ngn_rate": None,
+
+    "minimum_reserve_minor": 0,
+
+    "providers": {
+        "cloudflare": 1,
+        "openai": 1,
+        "luma": 1,
+        "pixverse": 1
+    }
+}
+
+
 class CreditPurchaseRequest(BaseModel):
     package: str
     email: str
@@ -1430,6 +1450,38 @@ def get_provider_funding_report():
     finally:
         if connection:
             connection.close()
+
+def calculate_provider_allocations(report):
+    config = PROVIDER_FUNDING_CONFIG
+
+    result = {
+        "status": "paused",
+        "allocations": {},
+        "total_reserved_minor": 0,
+        "currency": "NGN",
+        "reason": None
+    }
+
+    if not config["enabled"]:
+        result["reason"] = "Provider funding is disabled."
+        return result
+
+    if not config["usd_to_ngn_rate"]:
+        result["reason"] = "Verified USD exchange rate required."
+        return result
+
+    if not report.get("safe_to_fund", False):
+        result["reason"] = (
+            "Funding is paused until customer obligations "
+            "and operating costs are fully accounted for."
+        )
+        return result
+
+    result["reason"] = "Ready for allocation calculation."
+    result["status"] = "ready"
+
+    return result
+    
 
     
 @app.post("/paystack-webhook")
