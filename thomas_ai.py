@@ -1372,9 +1372,52 @@ def get_provider_funding_report():
                 "unit_scale": int(unit_scale)
             })
 
+        
+        # 6. Calculate available NGN funds
+        revenue_minor = report[
+            "confirmed_customer_revenue"
+        ].get("NGN", 0)
+
+        credit_reserve_minor = report[
+            "estimated_customer_credit_reserve"
+        ]["amount_minor"]
+
+        payment_fees_minor = report[
+            "recorded_payment_fees"
+        ].get("NGN", 0)
+
+        refunds_minor = report[
+            "recorded_refunds"
+        ].get("NGN", 0)
+
+        available_minor = max(
+            0,
+            revenue_minor
+            - credit_reserve_minor
+            - payment_fees_minor
+            - refunds_minor
+        )
+
+        report["funding_calculation"] = {
+            "currency": "NGN",
+            "confirmed_revenue_minor": revenue_minor,
+            "customer_reserve_minor": credit_reserve_minor,
+            "payment_fees_minor": payment_fees_minor,
+            "refunds_minor": refunds_minor,
+            "available_before_provider_and_operating_costs_minor": (
+                available_minor
+            ),
+            "available_before_provider_and_operating_costs_naira": (
+                round(available_minor / 100, 2)
+            )
+        }
+
+        report["safe_to_fund"] = False
+
         cursor.close()
 
         return report
+            
 
     except Exception as error:
         print(
