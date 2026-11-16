@@ -1216,6 +1216,86 @@ def payment_status(
     finally:
         if connection:
             connection.close()
+
+from decimal import Decimal
+import os
+import psycopg2
+
+
+def get_provider_funding_report():
+    connection = None
+
+    try:
+        connection = psycopg2.connect(
+            os.getenv("DATABASE_URL")
+        )
+
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            SELECT
+                currency,
+                entry_type,
+                direction,
+                COALESCE(SUM(amount_minor), 0)
+            FROM business_ledger
+            GROUP BY currency, entry_type, direction
+            ORDER BY currency, entry_type;
+        """)
+
+        rows = cursor.fetchall()
+
+        report = {
+            "confirmed_customer_revenue": {},
+            "recorded_payment_fees": {},
+            "recorded_refunds": {},
+            "provider_usage": {},
+            "other_entries": [],
+            "safe_to_fund": False,
+            "note": (
+                "This is a read-only financial report. "
+                "Customer credit obligations and other operating "
+                "costs must be accounted for before funding."
+            )
+        }
+
+        for currency, entry_type, direction, amount in rows:
+            amount = int(amount)
+
+            if entry_type == "customer_payment" and direction == "income":
+                report["confirmed_customer_revenue"][currency] = amount
+
+            elif entry_type == "payment_fee":
+                report["recorded_payment_fees"][currency] = amount
+
+            elif entry_type == "refund":
+                report["recorded_refunds"][currency] = amount
+
+            elif entry_type == "provider_usage":
+                report["provider_usage"][currency] = amount
+
+            else:
+                report["other_entries"].append({
+                    "currency": currency,
+                    "entry_type": entry_type,
+                    "direction": direction,
+                    "amount_minor": amount
+                })
+
+        return report
+
+    except Exception as error:
+        print(
+            "PROVIDER FUNDING REPORT ERROR:",
+            repr(error),
+            flush=True
+        )
+        raise
+
+    finally:
+        if connection:
+            connection.close()
+
 @app.post("/paystack-webhook")
 async def paystack_webhook(request: Request):
 
