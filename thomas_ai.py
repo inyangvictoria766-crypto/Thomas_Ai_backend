@@ -1568,6 +1568,11 @@ async def paystack_webhook(request: Request):
         verification = verification_response.json()
         verified_payment = verification.get("data") or {}
         paystack_fee_minor = verified_payment.get("fees")
+        print(
+           "PAYSTACK VERIFIED FEE:",
+            repr(paystack_fee_minor),
+            flush=True
+        )
         
         if paystack_fee_minor is not None:
             paystack_fee_minor = int(paystack_fee_minor)
