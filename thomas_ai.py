@@ -1222,6 +1222,7 @@ import os
 import psycopg2
 
 
+
 def get_provider_funding_report():
     connection = None
 
@@ -1232,6 +1233,7 @@ def get_provider_funding_report():
 
         cursor = connection.cursor()
 
+        # 1. Read business ledger
         cursor.execute("""
             SELECT
                 currency,
@@ -1245,20 +1247,47 @@ def get_provider_funding_report():
 
         rows = cursor.fetchall()
 
+        # 2. Read outstanding customer credits
+        cursor.execute("""
+            SELECT
+                COUNT(*) AS total_users,
+                COUNT(*) FILTER (
+                    WHERE credits > 0
+                ) AS users_with_credits,
+                COALESCE(
+                    SUM(GREATEST(credits, 0)), 0
+                ) AS outstanding_customer_credits
+            FROM app_users;
+        """)
+
+        credit_row = cursor.fetchone()
+
+        # 3. Build report
         report = {
             "confirmed_customer_revenue": {},
             "recorded_payment_fees": {},
             "recorded_refunds": {},
             "provider_usage": {},
+
+            "customer_credit_obligations": {
+                "total_users": credit_row[0],
+                "users_with_credits": credit_row[1],
+                "outstanding_credits": credit_row[2]
+            },
+
             "other_entries": [],
             "safe_to_fund": False,
+
             "note": (
-                "This is a read-only financial report. "
-                "Customer credit obligations and other operating "
-                "costs must be accounted for before funding."
+                "Read-only financial report. "
+                "Outstanding credits are not yet converted "
+                "into a monetary liability. Other operating "
+                "costs and provider billing requirements "
+                "must also be accounted for."
             )
         }
 
+        # 4. Categorize ledger entries
         for currency, entry_type, direction, amount in rows:
             amount = int(amount)
 
@@ -1282,6 +1311,8 @@ def get_provider_funding_report():
                     "amount_minor": amount
                 })
 
+        cursor.close()
+
         return report
 
     except Exception as error:
@@ -1295,7 +1326,7 @@ def get_provider_funding_report():
     finally:
         if connection:
             connection.close()
-
+    
 @app.post("/paystack-webhook")
 async def paystack_webhook(request: Request):
 
