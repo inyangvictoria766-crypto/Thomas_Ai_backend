@@ -64,7 +64,7 @@ PROVIDER_FUNDING_CONFIG = {
 
     # Set this to the actual rate when funding USD.
     # None means USD allocations remain paused.
-    "usd_to_ngn_rate": None,
+    "usd_to_ngn_rate": 1344.78,
 
     "minimum_reserve_minor": 0,
 
