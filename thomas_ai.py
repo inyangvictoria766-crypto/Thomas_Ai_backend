@@ -1411,14 +1411,16 @@ def get_provider_funding_report():
             "recorded_refunds"
         ].get("NGN", 0)
 
-        hosting_minor = sum(
-            int(amount)
-            for currency, entry_type, direction, amount in ledger_rows
-            if currency == "NGN"
-            and entry_type == "hosting"
-            and direction == "expense"
+        operating_expenses_minor = sum(
+    int(amount)
+    for currency, entry_type, direction, amount in ledger_rows
+    if currency == "NGN"
+    and direction == "expense"
+    and entry_type in (
+        "hosting",
+        "adjustment"
+    )
         )
-
         available_minor = max(
             0,
             revenue_minor
