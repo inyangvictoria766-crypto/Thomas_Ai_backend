@@ -1329,6 +1329,7 @@ def get_provider_funding_report():
             "recorded_refunds": {},
             "provider_usage": {},
             "provider_activity_by_provider": {},
+            "provider_activity_by_model": {},
             "customer_credit_obligations": {
                 "total_users": credit_row[0],
                 "users_with_credits": credit_row[1],
@@ -1354,6 +1355,36 @@ def get_provider_funding_report():
                 "must be calculated before funding."
             )
         }
+        cursor.execute("""
+            SELECT
+                metadata->>'provider' AS provider,
+                metadata->>'model' AS model,
+                currency,
+                unit_scale,
+                COALESCE(SUM(amount_minor), 0)
+            FROM business_ledger
+            WHERE entry_type = 'provider_usage'
+              AND direction = 'expense'
+              AND metadata->>'model' IS NOT NULL
+            GROUP BY
+                metadata->>'provider',
+                metadata->>'model',
+                currency,
+                unit_scale
+            ORDER BY provider, model;
+        """)
+
+        model_rows = cursor.fetchall()
+        for provider, model, currency, unit_scale, amount in model_rows:
+            key = f"{provider}:{model}"
+
+            report["provider_activity_by_model"][key] = {
+                "provider": provider,
+                "model": model,
+                "currency": currency,
+                "amount_minor": int(amount),
+                "unit_scale": int(unit_scale)
+            }
 
         # 4. Categorize ledger entries
         for currency, entry_type, direction, amount in ledger_rows:
