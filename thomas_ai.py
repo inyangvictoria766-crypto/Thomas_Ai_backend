@@ -2446,10 +2446,18 @@ async def upload_image(
             provider_cost = openai_cost
 
         else:
-            provider_cost = get_cloudflare_editing_cost(
-                width,
-                height
-            )
+            try:
+                provider_cost = get_cloudflare_editing_cost(
+                    width,
+                    height
+                )
+            except Exception as error:
+                print(
+                    "CLOUDFLARE EDIT COST ERROR:",
+                    repr(error),
+                    flush=True
+                )
+                provider_cost = None
 
         record_generation(
             user_id,
