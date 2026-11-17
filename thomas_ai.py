@@ -1484,9 +1484,9 @@ def get_provider_funding_report():
     for currency, entry_type, direction, amount in ledger_rows
     if currency == "NGN"
     and direction == "expense"
-    and entry_type in (
-        "hosting",
-        "adjustment"
+    and entry_type not in (
+        "payment_fee",
+        "provider_usage"
     )
         )
         available_minor = max(
