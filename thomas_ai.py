@@ -1941,7 +1941,7 @@ def get_cloudflare_generation_cost(model, steps, tiles):
             steps * tile_price[0]
         )
 
-        return float(total)
+        return total
 
     finally:
         connection.close()
