@@ -720,7 +720,7 @@ def record_generation(
     DO NOTHING
     RETURNING id;
 
-        """, ((
+        """, (
     user_id,
     quality,
     provider,
@@ -802,6 +802,7 @@ def record_generation(
                 usage_inserted = cursor.fetchone() is not None
 
                 if usage_inserted:
+                    
                     cursor.execute("""
                         UPDATE provider_accounts
                         SET
@@ -852,11 +853,18 @@ def record_generation(
                         model,
                         str(user_id)
                     ))
+                    if provider_cost_usd is not None and Decimal(str(provider_cost_usd)) > 0:
+                        cursor.execute("""
+                            UPDATE generation_history
+                            SET accounting_status = 'recorded'
+                            WHERE reservation_id = %s;
+                        """, (reservation_id,))
+        
 
         connection.commit()
 
         print(
-            "GENERATION ACCOUNTING SUCCESSFUL",
+            "GENERATION TRACKING SAVED",
             flush=True
         )
 
