@@ -1384,8 +1384,29 @@ def get_provider_funding_report():
                 unit_scale
             ORDER BY provider, model;
         """)
-
         model_rows = cursor.fetchall()
+        
+        cursor.execute("""
+            SELECT
+                accounting_status,
+                COUNT(*)
+            FROM generation_history
+            WHERE accounting_status IN ('pending', 'not_checked')
+            GROUP BY accounting_status
+            ORDER BY accounting_status;
+        """)
+
+        unaccounted_generations = {
+            row[0]: row[1]
+            for row in cursor.fetchall()
+        }
+        
+        report["unaccounted_generations"] = {
+    "pending": unaccounted_generations.get("pending", 0),
+    "not_checked": unaccounted_generations.get("not_checked", 0)
+        }
+
+        
         for provider, model, currency, unit_scale, amount in model_rows:
             key = f"{provider}:{model}"
 
