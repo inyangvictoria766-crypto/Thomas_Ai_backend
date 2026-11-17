@@ -704,28 +704,31 @@ def record_generation(
         )
 
         cursor.execute("""
-            INSERT INTO generation_history (
-                user_id,
-                quality,
-                provider,
-                status,
-                reservation_id,
-                model,
-                provider_cost_usd
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (reservation_id)
-            WHERE reservation_id IS NOT NULL
-            DO NOTHING
-            RETURNING id;
-        """, (
-            user_id,
-            quality,
-            provider,
-            "success",
-            reservation_id,
-            model,
-            provider_cost_usd
+    INSERT INTO generation_history (
+        user_id,
+        quality,
+        provider,
+        status,
+        reservation_id,
+        model,
+        provider_cost_usd,
+        accounting_status
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (reservation_id)
+    WHERE reservation_id IS NOT NULL
+    DO NOTHING
+    RETURNING id;
+
+        """, ((
+    user_id,
+    quality,
+    provider,
+    "success",
+    reservation_id,
+    model,
+    provider_cost_usd,
+    "pending"
         ))
 
         history_inserted = cursor.fetchone() is not None
