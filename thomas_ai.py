@@ -219,13 +219,20 @@ def settle_provider_budget(reservation_id, actual_cost):
         with connection:
             with connection.cursor() as cur:
                 cur.execute("""
-                    UPDATE provider_cost_reservations
+                    UPDATE provider_cost_reservations AS r
                     SET actual_cost_minor = %s,
                         status = 'settled',
                         updated_at = NOW()
-                    WHERE reservation_id = %s
-                      AND status = 'reserved'
-                    RETURNING id
+                    WHERE r.reservation_id = %s
+                      AND r.status = 'reserved'
+                      AND EXISTS (
+                          SELECT 1
+                          FROM provider_transactions AS pt
+                          WHERE pt.provider = r.provider
+                            AND pt.transaction_type = 'usage'
+                            AND pt.source_reference = r.reservation_id::text
+                      )
+                    RETURNING r.id
                 """, (actual_minor, reservation_id))
 
                 return cur.fetchone() is not None
