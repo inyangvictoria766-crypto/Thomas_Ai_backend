@@ -677,6 +677,7 @@ def refund_credits(user_id, reservation_id, quality):
 
 
 
+
 def record_generation(
     user_id,
     quality,
@@ -704,41 +705,37 @@ def record_generation(
         )
 
         cursor.execute("""
-    INSERT INTO generation_history (
-        user_id,
-        quality,
-        provider,
-        status,
-        reservation_id,
-        model,
-        provider_cost_usd,
-        accounting_status
-    )
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    ON CONFLICT (reservation_id)
-    WHERE reservation_id IS NOT NULL
-    DO NOTHING
-    RETURNING id;
-
+            INSERT INTO generation_history (
+                user_id,
+                quality,
+                provider,
+                status,
+                reservation_id,
+                model,
+                provider_cost_usd,
+                accounting_status
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (reservation_id)
+            WHERE reservation_id IS NOT NULL
+            DO NOTHING
+            RETURNING id;
         """, (
-    user_id,
-    quality,
-    provider,
-    "success",
-    reservation_id,
-    model,
-    provider_cost_usd,
-    "pending"
+            user_id,
+            quality,
+            provider,
+            "success",
+            reservation_id,
+            model,
+            provider_cost_usd,
+            "pending"
         ))
 
         history_inserted = cursor.fetchone() is not None
 
         if not history_inserted:
             connection.rollback()
-            print(
-                "DUPLICATE GENERATION: accounting skipped",
-                flush=True
-            )
+            print("DUPLICATE GENERATION: accounting skipped", flush=True)
             return
 
         if provider_cost_usd is not None:
@@ -776,13 +773,8 @@ def record_generation(
                         description
                     )
                     VALUES (
-                        %s,
-                        'usage',
-                        %s,
-                        'USD',
-                        100000000,
-                        %s,
-                        %s
+                        %s, 'usage', %s, 'USD',
+                        100000000, %s, %s
                     )
                     ON CONFLICT (
                         provider,
@@ -802,7 +794,7 @@ def record_generation(
                 usage_inserted = cursor.fetchone() is not None
 
                 if usage_inserted:
-                    
+
                     cursor.execute("""
                         UPDATE provider_accounts
                         SET
@@ -811,6 +803,26 @@ def record_generation(
                         WHERE provider = %s
                           AND currency = 'USD';
                     """, (cost_minor, provider))
+
+                    # Update internal provider funding expenditure.
+                    cursor.execute("""
+                        INSERT INTO provider_funding (
+                            provider,
+                            currency,
+                            funded_amount_minor,
+                            spent_amount_minor,
+                            low_balance_threshold_minor
+                        )
+                        VALUES (
+                            %s, 'USD', 0, %s, 100000000
+                        )
+                        ON CONFLICT (provider, currency)
+                        DO UPDATE SET
+                            spent_amount_minor =
+                                provider_funding.spent_amount_minor
+                                + EXCLUDED.spent_amount_minor,
+                            updated_at = NOW();
+                    """, (provider, cost_minor))
 
                     cursor.execute("""
                         INSERT INTO business_ledger (
@@ -853,20 +865,16 @@ def record_generation(
                         model,
                         str(user_id)
                     ))
-                    if provider_cost_usd is not None and Decimal(str(provider_cost_usd)) > 0:
-                        cursor.execute("""
-                            UPDATE generation_history
-                            SET accounting_status = 'recorded'
-                            WHERE reservation_id = %s;
-                        """, (reservation_id,))
-        
+
+                    cursor.execute("""
+                        UPDATE generation_history
+                        SET accounting_status = 'recorded'
+                        WHERE reservation_id = %s;
+                    """, (reservation_id,))
 
         connection.commit()
 
-        print(
-            "GENERATION TRACKING SAVED",
-            flush=True
-        )
+        print("GENERATION TRACKING SAVED", flush=True)
 
         cursor.close()
 
@@ -883,6 +891,7 @@ def record_generation(
     finally:
         if connection:
             connection.close()
+
 
 
 
