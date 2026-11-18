@@ -42,6 +42,9 @@ CREDIT_COSTS = {
     "medium": 2,
     "high": 3
 }
+
+OPENAI_MAX_IMAGE_RESERVATION_USD = Decimal("0.10")
+
 CREDIT_PACKAGES = {
     "starter": {
         "amount": 50000,
@@ -2127,10 +2130,10 @@ def get_openai_image_cost(usage, model):
 
     if output_details is None or output_details.image_tokens is None:
         raise ValueError("OpenAI image output usage is unavailable.")
-
+        
     text_tokens = Decimal(str(details.text_tokens or 0))
     image_tokens = Decimal(str(details.image_tokens or 0))
-    output_tokens = Decimal(str(output_details.image_tokens))
+    output_tokens = Decimal(str(output_tokens))
 
     total = (
         text_tokens * pricing["text_input"] +
