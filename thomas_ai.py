@@ -1957,6 +1957,9 @@ def get_cloudflare_generation_cost(model, steps, tiles):
 
 
 
+
+from decimal import Decimal
+
 def get_openai_image_cost(usage, model):
     if not usage:
         raise ValueError("OpenAI usage data is missing.")
@@ -1973,7 +1976,7 @@ def get_openai_image_cost(usage, model):
             """, (model,))
 
             pricing = {
-                row[0]: float(row[1])
+                row[0]: Decimal(str(row[1]))
                 for row in cur.fetchall()
             }
     finally:
@@ -1990,15 +1993,18 @@ def get_openai_image_cost(usage, model):
     if output_details is None or output_details.image_tokens is None:
         raise ValueError("OpenAI image output usage is unavailable.")
 
-    text_tokens = details.text_tokens or 0
-    image_tokens = details.image_tokens or 0
-    output_tokens = output_details.image_tokens
+    text_tokens = Decimal(str(details.text_tokens or 0))
+    image_tokens = Decimal(str(details.image_tokens or 0))
+    output_tokens = Decimal(str(output_details.image_tokens))
 
-    return (
+    total = (
         text_tokens * pricing["text_input"] +
         image_tokens * pricing["image_input"] +
         output_tokens * pricing["image_output"]
-    ) / 1_000_000
+    ) / Decimal("1000000")
+
+    return total
+
     
 # IMAGE GENERATION
 @app.post("/generate")
