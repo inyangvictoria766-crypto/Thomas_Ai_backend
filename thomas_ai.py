@@ -2222,15 +2222,35 @@ def generate_image(
             except Exception as error:
                 print("OPENAI COST ERROR:", repr(error), flush=True)
                 openai_cost = None
-            record_generation(
-    current_user["user_id"],
-    quality,
-    "openai",
-    reservation_id,
-    "gpt-image-2.5-flare",
-    openai_cost
+            try:
+    record_generation(
+        current_user["user_id"],
+        quality,
+        "openai",
+        reservation_id,
+        "gpt-image-2.5-flare",
+        openai_cost
+    )
+
+    if openai_cost is not None:
+        settled = settle_provider_budget(
+            reservation_id,
+            openai_cost
+        )
+
+        if not settled:
+            print(
+                "OPENAI BUDGET SETTLEMENT WARNING:",
+                reservation_id,
+                flush=True
             )
 
+except Exception as accounting_error:
+    print(
+        "OPENAI POST-GENERATION ACCOUNTING ERROR:",
+        repr(accounting_error),
+        flush=True
+    )
             return {
                 "image": image_data,
                 "provider": "openai",
@@ -2247,10 +2267,15 @@ def generate_image(
             raise
 
         except Exception as error:
+            print("OPENAI IMAGE ERROR:", repr(error), flush=True)
             refund_credits(
                 current_user["user_id"],
                 reservation_id,
                 quality
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="OpenAI image generation failed."
             )
             print("OPENAI IMAGE ERROR:", repr(error), flush=True)
             raise HTTPException(
