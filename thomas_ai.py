@@ -98,6 +98,141 @@ from fastapi import Header
 
 security = HTTPBearer()
 
+
+def reserve_provider_budget(
+    provider,
+    reservation_id,
+    estimated_cost
+):
+    from decimal import Decimal, ROUND_HALF_UP
+
+    estimated_minor = int(
+        (Decimal(str(estimated_cost)) * Decimal("100000000"))
+        .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    )
+
+    if estimated_minor < 0:
+        raise ValueError("Invalid provider cost estimate.")
+
+    connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+
+    try:
+        with connection:
+            with connection.cursor() as cur:
+
+                cur.execute("""
+                    INSERT INTO provider_funding (
+                        provider,
+                        currency
+                    )
+                    VALUES (%s, 'USD')
+                    ON CONFLICT (provider, currency) DO NOTHING
+                """, (provider,))
+
+                cur.execute("""
+                    SELECT
+                        funded_amount_minor,
+                        spent_amount_minor
+                    FROM provider_funding
+                    WHERE provider = %s
+                      AND currency = 'USD'
+                    FOR UPDATE
+                """, (provider,))
+
+                row = cur.fetchone()
+
+                if not row:
+                    raise ValueError("Provider funding record missing.")
+
+                funded, spent = row
+
+                cur.execute("""
+                    SELECT COALESCE(SUM(estimated_cost_minor), 0)
+                    FROM provider_cost_reservations
+                    WHERE provider = %s
+                      AND status = 'reserved'
+                """, (provider,))
+
+                pending = cur.fetchone()[0]
+
+                available = funded - spent - pending
+
+                if available < estimated_minor:
+                    return False
+
+                cur.execute("""
+                    INSERT INTO provider_cost_reservations (
+                        reservation_id,
+                        provider,
+                        estimated_cost_minor
+                    )
+                    VALUES (%s, %s, %s)
+                """, (
+                    reservation_id,
+                    provider,
+                    estimated_minor
+                ))
+
+                return True
+
+    finally:
+        connection.close()
+
+def release_provider_budget(reservation_id):
+    connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+
+    try:
+        with connection:
+            with connection.cursor() as cur:
+                cur.execute("""
+                    UPDATE provider_cost_reservations
+                    SET status = 'released',
+                        updated_at = NOW()
+                    WHERE reservation_id = %s
+                      AND status = 'reserved'
+                    RETURNING id
+                """, (reservation_id,))
+
+                return cur.fetchone() is not None
+
+    finally:
+        connection.close()
+        
+
+def settle_provider_budget(reservation_id, actual_cost):
+    from decimal import Decimal, ROUND_HALF_UP
+
+    actual_minor = int(
+        (Decimal(str(actual_cost)) * Decimal("100000000"))
+        .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    )
+
+    if actual_minor < 0:
+        raise ValueError("Invalid actual provider cost.")
+
+    connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+
+    try:
+        with connection:
+            with connection.cursor() as cur:
+                cur.execute("""
+                    UPDATE provider_cost_reservations
+                    SET actual_cost_minor = %s,
+                        status = 'settled',
+                        updated_at = NOW()
+                    WHERE reservation_id = %s
+                      AND status = 'reserved'
+                    RETURNING id
+                """, (actual_minor, reservation_id))
+
+                return cur.fetchone() is not None
+
+    finally:
+        connection.close()
+
+        
+        
+
 def get_authenticated_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
