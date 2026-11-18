@@ -109,13 +109,26 @@ def reserve_provider_budget(
 ):
     from decimal import Decimal, ROUND_HALF_UP
 
+    allowed_providers = {
+        "openai",
+        "cloudflare",
+        "higgsfield",
+        "luma",
+        "provider_5"
+    }
+
+    if provider not in allowed_providers:
+        raise ValueError("Unsupported provider.")
+
+    estimated = Decimal(str(estimated_cost))
+
+    if not estimated.is_finite() or estimated < 0:
+        raise ValueError("Invalid provider cost estimate.")
+
     estimated_minor = int(
-        (Decimal(str(estimated_cost)) * Decimal("100000000"))
+        (estimated * Decimal("100000000"))
         .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     )
-
-    if estimated_minor < 0:
-        raise ValueError("Invalid provider cost estimate.")
 
     connection = psycopg2.connect(os.getenv("DATABASE_URL"))
 
@@ -150,7 +163,27 @@ def reserve_provider_budget(
                 funded, spent = row
 
                 cur.execute("""
-                    SELECT COALESCE(SUM(estimated_cost_minor), 0)
+                    SELECT
+                        estimated_cost_minor,
+                        status
+                    FROM provider_cost_reservations
+                    WHERE reservation_id = %s
+                """, (reservation_id,))
+
+                existing = cur.fetchone()
+
+                if existing:
+                    existing_estimate, existing_status = existing
+
+                    return (
+                        existing_status == "reserved"
+                        and existing_estimate == estimated_minor
+                    )
+
+                cur.execute("""
+                    SELECT COALESCE(
+                        SUM(estimated_cost_minor), 0
+                    )
                     FROM provider_cost_reservations
                     WHERE provider = %s
                       AND status = 'reserved'
@@ -819,10 +852,6 @@ def refund_credits(user_id, reservation_id, quality):
 
 
 
-
-
-
-
 def record_generation(
     user_id,
     quality,
@@ -834,209 +863,228 @@ def record_generation(
     connection = None
 
     try:
+        from decimal import Decimal, ROUND_HALF_UP
+
         connection = psycopg2.connect(
             os.getenv("DATABASE_URL")
         )
-        cursor = connection.cursor()
 
-        print(
-            "GENERATION TRACKING:",
-            user_id,
-            quality,
-            provider,
-            reservation_id,
-            model,
-            flush=True
-        )
+        with connection:
+            with connection.cursor() as cursor:
 
-        cursor.execute("""
-            INSERT INTO generation_history (
-                user_id,
-                quality,
-                provider,
-                status,
-                reservation_id,
-                model,
-                provider_cost_usd,
-                accounting_status
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (reservation_id)
-            WHERE reservation_id IS NOT NULL
-            DO NOTHING
-            RETURNING id;
-        """, (
-            user_id,
-            quality,
-            provider,
-            "success",
-            reservation_id,
-            model,
-            provider_cost_usd,
-            "pending"
-        ))
-
-        history_inserted = cursor.fetchone() is not None
-
-        if not history_inserted:
-            connection.rollback()
-            print("DUPLICATE GENERATION: accounting skipped", flush=True)
-            return
-
-        if provider_cost_usd is not None:
-            cost = Decimal(str(provider_cost_usd))
-
-            if cost > 0:
-                cost_minor = int(
-                    (cost * Decimal("100000000")).quantize(
-                        Decimal("1")
-                    )
+                print(
+                    "GENERATION TRACKING:",
+                    user_id,
+                    quality,
+                    provider,
+                    reservation_id,
+                    model,
+                    flush=True
                 )
 
-                description = f"{provider} usage: {model}"
-
                 cursor.execute("""
-                    INSERT INTO provider_accounts (
+                    INSERT INTO generation_history (
+                        user_id,
+                        quality,
                         provider,
-                        currency,
-                        balance_minor,
-                        unit_scale
+                        status,
+                        reservation_id,
+                        model,
+                        provider_cost_usd,
+                        accounting_status
                     )
-                    VALUES (%s, 'USD', 0, 100000000)
-                    ON CONFLICT (provider)
-                    DO NOTHING;
-                """, (provider,))
-
-                cursor.execute("""
-                    INSERT INTO provider_transactions (
-                        provider,
-                        transaction_type,
-                        amount_minor,
-                        currency,
-                        unit_scale,
-                        source_reference,
-                        description
-                    )
-                    VALUES (
-                        %s, 'usage', %s, 'USD',
-                        100000000, %s, %s
-                    )
-                    ON CONFLICT (
-                        provider,
-                        transaction_type,
-                        source_reference
-                    )
-                    WHERE source_reference IS NOT NULL
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (reservation_id)
+                    WHERE reservation_id IS NOT NULL
                     DO NOTHING
                     RETURNING id;
                 """, (
+                    user_id,
+                    quality,
                     provider,
-                    cost_minor,
-                    str(reservation_id),
-                    description
+                    "success",
+                    reservation_id,
+                    model,
+                    provider_cost_usd,
+                    "pending"
                 ))
 
-                usage_inserted = cursor.fetchone() is not None
+                history_inserted = cursor.fetchone() is not None
 
-                if usage_inserted:
+                if not history_inserted:
+                    print(
+                        "DUPLICATE GENERATION: accounting skipped",
+                        flush=True
+                    )
+                    return
 
-                    cursor.execute("""
-                        UPDATE provider_accounts
-                        SET
-                            balance_minor = balance_minor - %s,
-                            updated_at = NOW()
-                        WHERE provider = %s
-                          AND currency = 'USD';
-                    """, (cost_minor, provider))
+                if provider_cost_usd is not None:
 
-                    # Update internal provider funding expenditure.
-                    cursor.execute("""
-                        INSERT INTO provider_funding (
-                            provider,
-                            currency,
-                            funded_amount_minor,
-                            spent_amount_minor,
-                            low_balance_threshold_minor
-                        )
-                        VALUES (
-                            %s, 'USD', 0, %s, 100000000
-                        )
-                        ON CONFLICT (provider, currency)
-                        DO UPDATE SET
-                            spent_amount_minor =
-                                provider_funding.spent_amount_minor
-                                + EXCLUDED.spent_amount_minor,
-                            updated_at = NOW();
-                    """, (provider, cost_minor))
+                    cost = Decimal(str(provider_cost_usd))
 
-                    cursor.execute("""
-                        INSERT INTO business_ledger (
-                            entry_type,
-                            direction,
-                            amount_minor,
-                            currency,
-                            unit_scale,
-                            source,
-                            source_reference,
-                            description,
-                            metadata
-                        )
-                        VALUES (
-                            'provider_usage',
-                            'expense',
-                            %s,
-                            'USD',
-                            100000000,
-                            'provider',
-                            %s,
-                            %s,
-                            jsonb_build_object(
-                                'provider', %s,
-                                'model', %s,
-                                'user_id', %s
+                    if not cost.is_finite() or cost < 0:
+                        raise ValueError("Invalid provider cost.")
+
+                    if cost > 0:
+
+                        cost_minor = int(
+                            (cost * Decimal("100000000")).quantize(
+                                Decimal("1"),
+                                rounding=ROUND_HALF_UP
                             )
                         )
-                        ON CONFLICT (
-                            source,
-                            source_reference,
-                            entry_type
-                        )
-                        DO NOTHING;
-                    """, (
-                        cost_minor,
-                        str(reservation_id),
-                        description,
-                        provider,
-                        model,
-                        str(user_id)
-                    ))
 
-                    cursor.execute("""
-                        UPDATE generation_history
-                        SET accounting_status = 'recorded'
-                        WHERE reservation_id = %s;
-                    """, (reservation_id,))
+                        description = f"{provider} usage: {model}"
 
-        connection.commit()
+                        cursor.execute("""
+                            INSERT INTO provider_accounts (
+                                provider,
+                                currency,
+                                balance_minor,
+                                unit_scale
+                            )
+                            VALUES (%s, 'USD', 0, 100000000)
+                            ON CONFLICT (provider)
+                            DO NOTHING;
+                        """, (provider,))
 
-        print("GENERATION TRACKING SAVED", flush=True)
+                        cursor.execute("""
+                            INSERT INTO provider_transactions (
+                                provider,
+                                transaction_type,
+                                amount_minor,
+                                currency,
+                                unit_scale,
+                                source_reference,
+                                description
+                            )
+                            VALUES (
+                                %s, 'usage', %s, 'USD',
+                                100000000, %s, %s
+                            )
+                            ON CONFLICT (
+                                provider,
+                                transaction_type,
+                                source_reference
+                            )
+                            WHERE source_reference IS NOT NULL
+                            DO NOTHING
+                            RETURNING id;
+                        """, (
+                            provider,
+                            cost_minor,
+                            str(reservation_id),
+                            description
+                        ))
 
-        cursor.close()
+                        usage_inserted = cursor.fetchone() is not None
+
+                        if usage_inserted:
+
+                            cursor.execute("""
+                                UPDATE provider_accounts
+                                SET
+                                    balance_minor = balance_minor - %s,
+                                    updated_at = NOW()
+                                WHERE provider = %s
+                                  AND currency = 'USD';
+                            """, (cost_minor, provider))
+
+                            cursor.execute("""
+                                INSERT INTO provider_funding (
+                                    provider,
+                                    currency,
+                                    funded_amount_minor,
+                                    spent_amount_minor,
+                                    low_balance_threshold_minor
+                                )
+                                VALUES (
+                                    %s, 'USD', 0, %s, 100000000
+                                )
+                                ON CONFLICT (provider, currency)
+                                DO UPDATE SET
+                                    spent_amount_minor =
+                                        provider_funding.spent_amount_minor
+                                        + EXCLUDED.spent_amount_minor,
+                                    updated_at = NOW();
+                            """, (provider, cost_minor))
+
+                            cursor.execute("""
+                                INSERT INTO business_ledger (
+                                    entry_type,
+                                    direction,
+                                    amount_minor,
+                                    currency,
+                                    unit_scale,
+                                    source,
+                                    source_reference,
+                                    description,
+                                    metadata
+                                )
+                                VALUES (
+                                    'provider_usage',
+                                    'expense',
+                                    %s,
+                                    'USD',
+                                    100000000,
+                                    'provider',
+                                    %s,
+                                    %s,
+                                    jsonb_build_object(
+                                        'provider', %s,
+                                        'model', %s,
+                                        'user_id', %s
+                                    )
+                                )
+                                ON CONFLICT (
+                                    source,
+                                    source_reference,
+                                    entry_type
+                                )
+                                DO NOTHING;
+                            """, (
+                                cost_minor,
+                                str(reservation_id),
+                                description,
+                                provider,
+                                model,
+                                str(user_id)
+                            ))
+
+                            # Settle the reservation in this same transaction.
+                            cursor.execute("""
+                                UPDATE provider_cost_reservations
+                                SET
+                                    actual_cost_minor = %s,
+                                    status = 'settled',
+                                    updated_at = NOW()
+                                WHERE reservation_id = %s
+                                  AND provider = %s
+                                  AND status = 'reserved';
+                            """, (
+                                cost_minor,
+                                reservation_id,
+                                provider
+                            ))
+
+                            cursor.execute("""
+                                UPDATE generation_history
+                                SET accounting_status = 'recorded'
+                                WHERE reservation_id = %s;
+                            """, (reservation_id,))
+
+                print(
+                    "GENERATION TRACKING SAVED",
+                    flush=True
+                )
 
     except Exception as error:
-        if connection:
-            connection.rollback()
-
         print(
             "GENERATION ACCOUNTING ERROR:",
             repr(error),
             flush=True
         )
-
-    finally:
-        if connection:
-            connection.close()
-
+        
 
 
 
@@ -2238,19 +2286,6 @@ def generate_image(
         "gpt-image-2.5-flare",
         openai_cost
     )
-
-    if openai_cost is not None:
-        settled = settle_provider_budget(
-            reservation_id,
-            openai_cost
-        )
-
-        if not settled:
-            print(
-                "OPENAI BUDGET SETTLEMENT WARNING:",
-                reservation_id,
-                flush=True
-            )
 
 except Exception as accounting_error:
     print(
