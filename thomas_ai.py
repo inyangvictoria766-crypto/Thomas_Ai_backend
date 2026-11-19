@@ -2152,48 +2152,87 @@ def get_cloudflare_generation_cost(model, steps, tiles):
 
 
 
-from types import SimpleNamespace
+
 from decimal import Decimal
+import os
+import psycopg2
 
-pricing = {
-    "text_input": Decimal("5"),
-    "image_input": Decimal("8"),
-    "image_output": Decimal("30")
-}
 
-fake_usage = SimpleNamespace(
-    input_tokens_details=SimpleNamespace(
-        text_tokens=1000,
-        image_tokens=2000
-    ),
-    output_tokens_details=SimpleNamespace(
-        image_tokens=3000
+def get_openai_image_cost(usage, model):
+    if not usage:
+        raise ValueError("OpenAI usage data is missing.")
+
+    connection = psycopg2.connect(
+        os.getenv("DATABASE_URL")
     )
-)
 
-text_tokens = Decimal(str(
-    fake_usage.input_tokens_details.text_tokens
-))
+    try:
+        with connection.cursor() as cur:
+            cur.execute("""
+                SELECT feature, cost_per_unit
+                FROM provider_pricing
+                WHERE provider = 'openai'
+                  AND model = %s
+            """, (model,))
 
-image_tokens = Decimal(str(
-    fake_usage.input_tokens_details.image_tokens
-))
+            pricing = {
+                row[0]: Decimal(str(row[1]))
+                for row in cur.fetchall()
+            }
+    finally:
+        connection.close()
 
-image_output_tokens = Decimal(str(
-    fake_usage.output_tokens_details.image_tokens
-))
+    required = {
+        "text_input",
+        "image_input",
+        "image_output"
+    }
 
-total = (
-    text_tokens * pricing["text_input"]
-    + image_tokens * pricing["image_input"]
-    + image_output_tokens * pricing["image_output"]
-) / Decimal("1000000")
+    if not required.issubset(pricing):
+        raise ValueError("OpenAI pricing records are incomplete.")
 
-print("Corrected image cost: $", total)
+    input_details = getattr(
+        usage,
+        "input_tokens_details",
+        None
+    )
 
-assert total == Decimal("0.111")
-print("TEST PASSED")
+    output_details = getattr(
+        usage,
+        "output_tokens_details",
+        None
+    )
 
+    if input_details is None or output_details is None:
+        raise ValueError("OpenAI token details are incomplete.")
+
+    text_tokens = getattr(input_details, "text_tokens", None)
+    image_tokens = getattr(input_details, "image_tokens", None)
+    image_output_tokens = getattr(output_details, "image_tokens", None)
+
+    if (
+        text_tokens is None
+        or image_tokens is None
+        or image_output_tokens is None
+    ):
+        raise ValueError("Required image usage values are missing.")
+
+    values = [
+        Decimal(str(text_tokens)),
+        Decimal(str(image_tokens)),
+        Decimal(str(image_output_tokens))
+    ]
+
+    if any(not value.is_finite() or value < 0 for value in values):
+        raise ValueError("Invalid OpenAI usage values.")
+
+    total = (
+        values[0] * pricing["text_input"]
+        + values[1] * pricing["image_input"]
+        + values[2] * pricing["image_output"]
+    ) / Decimal("1000000")
+
+    return total
 
     
 # IMAGE GENERATION
