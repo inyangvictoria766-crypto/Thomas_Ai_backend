@@ -1051,27 +1051,37 @@ def record_generation(
                                 str(user_id)
                             ))
 
-                            # Settle the reservation in this same transaction.
-                            cursor.execute("""
-                                UPDATE provider_cost_reservations
-                                SET
-                                    actual_cost_minor = %s,
-                                    status = 'settled',
-                                    updated_at = NOW()
-                                WHERE reservation_id = %s
-                                  AND provider = %s
-                                  AND status = 'reserved';
-                            """, (
-                                cost_minor,
-                                reservation_id,
-                                provider
-                            ))
+                            
+# Settle the reservation in this same transaction.
+cursor.execute("""
+    UPDATE provider_cost_reservations
+    SET
+        actual_cost_minor = %s,
+        status = 'settled',
+        updated_at = NOW()
+    WHERE reservation_id = %s
+      AND provider = %s
+      AND status = 'reserved'
+    RETURNING id;
+""", (
+    cost_minor,
+    reservation_id,
+    provider
+))
 
-                            cursor.execute("""
-                                UPDATE generation_history
-                                SET accounting_status = 'recorded'
-                                WHERE reservation_id = %s;
-                            """, (reservation_id,))
+reservation_settled = cursor.fetchone() is not None
+
+if not reservation_settled:
+    raise ValueError(
+        "Provider reservation could not be settled."
+    )
+
+cursor.execute("""
+    UPDATE generation_history
+    SET accounting_status = 'recorded'
+    WHERE reservation_id = %s;
+""", (reservation_id,))
+
 
                 print(
                     "GENERATION TRACKING SAVED",
@@ -1084,6 +1094,14 @@ def record_generation(
             repr(error),
             flush=True
         )
+          
+    finally:
+        if connection is not None:
+            connection.close()
+
+        
+     
+
         
 
 
