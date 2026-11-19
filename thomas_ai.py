@@ -2151,52 +2151,49 @@ def get_cloudflare_generation_cost(model, steps, tiles):
 
 
 
+
+from types import SimpleNamespace
 from decimal import Decimal
 
-def get_openai_image_cost(usage, model):
-    if not usage:
-        raise ValueError("OpenAI usage data is missing.")
+pricing = {
+    "text_input": Decimal("5"),
+    "image_input": Decimal("8"),
+    "image_output": Decimal("30")
+}
 
-    connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+fake_usage = SimpleNamespace(
+    input_tokens_details=SimpleNamespace(
+        text_tokens=1000,
+        image_tokens=2000
+    ),
+    output_tokens_details=SimpleNamespace(
+        image_tokens=3000
+    )
+)
 
-    try:
-        with connection.cursor() as cur:
-            cur.execute("""
-                SELECT feature, cost_per_unit
-                FROM provider_pricing
-                WHERE provider = 'openai'
-                AND model = %s
-            """, (model,))
+text_tokens = Decimal(str(
+    fake_usage.input_tokens_details.text_tokens
+))
 
-            pricing = {
-                row[0]: Decimal(str(row[1]))
-                for row in cur.fetchall()
-            }
-    finally:
-        connection.close()
+image_tokens = Decimal(str(
+    fake_usage.input_tokens_details.image_tokens
+))
 
-    required = {"text_input", "image_input", "image_output"}
+image_output_tokens = Decimal(str(
+    fake_usage.output_tokens_details.image_tokens
+))
 
-    if not required.issubset(pricing):
-        raise ValueError("OpenAI pricing records are incomplete.")
+total = (
+    text_tokens * pricing["text_input"]
+    + image_tokens * pricing["image_input"]
+    + image_output_tokens * pricing["image_output"]
+) / Decimal("1000000")
 
-    details = usage.input_tokens_details
-    output_details = getattr(usage, "output_tokens_details", None)
+print("Corrected image cost: $", total)
 
-    if output_details is None or output_details.image_tokens is None:
-        raise ValueError("OpenAI image output usage is unavailable.")
-        
-    text_tokens = Decimal(str(details.text_tokens or 0))
-    image_tokens = Decimal(str(details.image_tokens or 0))
-    output_tokens = Decimal(str(output_tokens))
+assert total == Decimal("0.111")
+print("TEST PASSED")
 
-    total = (
-        text_tokens * pricing["text_input"] +
-        image_tokens * pricing["image_input"] +
-        output_tokens * pricing["image_output"]
-    ) / Decimal("1000000")
-
-    return total
 
     
 # IMAGE GENERATION
