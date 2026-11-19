@@ -2296,8 +2296,8 @@ def generate_image(
     if not budget_reserved:
         refund_credits(
             current_user["user_id"],
-            credits_used,
-            reservation_id
+            reservation_id,
+            quality
         )
         raise HTTPException(
             status_code=503,
@@ -2381,8 +2381,8 @@ except Exception as accounting_error:
 
                 refund_credits(
                     current_user["user_id"],
-                    credits_used,
-                    reservation_id
+                    reservation_id,
+                    quality
                 )
             raise
 
@@ -2398,8 +2398,8 @@ except Exception as accounting_error:
 
                 refund_credits(
                     current_user["user_id"],
-                    credits_used,
-                    reservation_id
+                    reservation_id,
+                    quality
                 )
 
             raise HTTPException(
@@ -2411,8 +2411,8 @@ except Exception as accounting_error:
 
             refund_credits(
                 current_user["user_id"],
-                credits_used,
-                reservation_id
+                reservation_id,
+                quality
             )
 
             raise HTTPException(
@@ -2433,8 +2433,8 @@ except Exception as accounting_error:
     if not cloudflare_budget_reserved:
         refund_credits(
             current_user["user_id"],
-            credits_used,
-            reservation_id
+            reservation_id,
+            quality
         )
         raise HTTPException(
             status_code=503,
@@ -2525,8 +2525,8 @@ except Exception as accounting_error:
 
             refund_credits(
                 current_user["user_id"],
-                credits_used,
-                reservation_id
+                reservation_id,
+                quality
             )
         raise
 
@@ -2542,8 +2542,8 @@ except Exception as accounting_error:
 
             refund_credits(
                 current_user["user_id"],
-                credits_used,
-                reservation_id
+                reservation_id,
+                quality
             )
 
         raise HTTPException(
@@ -2556,8 +2556,8 @@ except Exception as accounting_error:
 
         refund_credits(
             current_user["user_id"],
-            credits_used,
-            reservation_id
+            reservation_id,
+            quality
         )
 
         raise HTTPException(
