@@ -2285,11 +2285,13 @@ def generate_image(
 
     # HIGH QUALITY: OPENAI
     if quality == "high":
-    budget_reserved = reserve_provider_budget(
-        "openai",
-        reservation_id,
-        OPENAI_MAX_IMAGE_RESERVATION_USD
-    )
+        openai_generation_succeeded = False
+
+        budget_reserved = reserve_provider_budget(
+             "openai",
+              reservation_id,
+             OPENAI_MAX_IMAGE_RESERVATION_USD
+         )
 
     if not budget_reserved:
         refund_credits(
@@ -2303,6 +2305,7 @@ def generate_image(
         )
 
     api_key = os.getenv("OPENAI_API_KEY")
+    
         try:
             if not api_key:
                 raise HTTPException(
@@ -2318,14 +2321,16 @@ def generate_image(
 
             response = client.images.generate(
                 model="gpt-image-2.5-flare",
-                prompt=prompt,
-                quality="high",
-                size="1024x1024",
-                output_format="png",
-                n=1
+                 prompt=prompt,
+                 quality="high",
+                 size="1024x1024",
+                 output_format="png",
+                 n=1
             )
+            openai_generation_succeeded = True
 
             image_data = response.data[0].b64_json
+            openai_generation_succeeded = True
             print(
                 "OPENAI REAL USAGE:",
                  repr(response.usage),
@@ -2370,12 +2375,15 @@ except Exception as accounting_error:
                 "status": "success"
             }
 
-        except HTTPException:
-            refund_credits(
-                current_user["user_id"],
-                reservation_id,
-                quality
-            )
+         except HTTPException:
+            if not openai_generation_succeeded:
+                release_provider_budget(reservation_id)
+
+                refund_credits(
+                    current_user["user_id"],
+                    credits_used,
+                    reservation_id
+                )
             raise
 
         except Exception as error:
@@ -2383,6 +2391,20 @@ except Exception as accounting_error:
                 "OPENAI IMAGE ERROR:",
                 repr(error),
                 flush=True
+            )
+
+            if not openai_generation_succeeded:
+                release_provider_budget(reservation_id)
+
+                refund_credits(
+                    current_user["user_id"],
+                    credits_used,
+                    reservation_id
+                )
+
+            raise HTTPException(
+                status_code=502,
+                detail="OpenAI image generation failed."
             )
 
             release_provider_budget(reservation_id)
@@ -2401,6 +2423,23 @@ except Exception as accounting_error:
 
     api_token = os.getenv("CLOUDFLARE_API_TOKEN")
     account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+    cloudflare_generation_succeeded = False
+    cloudflare_budget_reserved = reserve_provider_budget(
+    "cloudflare",
+    reservation_id,
+    Decimal("0.0006336")
+)
+
+    if not cloudflare_budget_reserved:
+        refund_credits(
+            current_user["user_id"],
+            credits_used,
+            reservation_id
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Cloudflare generation budget is unavailable."
+        )
 
     
 
@@ -2441,6 +2480,7 @@ except Exception as accounting_error:
                 status_code=502,
                 detail="Cloudflare image generation failed."
             )
+        cloudflare_generation_succeeded = True
         
         image_data = result["result"]["image"]
         cloudflare_steps = 4
@@ -2477,31 +2517,52 @@ except Exception as accounting_error:
             "status": "success"
         }
 
-    except HTTPException:
-        refund_credits(
-            current_user["user_id"],
-            reservation_id,
-            quality
-        )
+    
+        except HTTPException:
+        if not cloudflare_generation_succeeded:
+            release_provider_budget(reservation_id)
+
+            refund_credits(
+                current_user["user_id"],
+                credits_used,
+                reservation_id
+            )
         raise
 
     except Exception as error:
-        refund_credits(
-            current_user["user_id"],
-            reservation_id,
-            quality
-        )
-
         print(
             "CLOUDFLARE ERROR:",
             repr(error),
             flush=True
         )
 
+        if not cloudflare_generation_succeeded:
+            release_provider_budget(reservation_id)
+
+            refund_credits(
+                current_user["user_id"],
+                credits_used,
+                reservation_id
+            )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Cloudflare image generation failed."
+)
+
+        release_provider_budget(reservation_id)
+
+        refund_credits(
+            current_user["user_id"],
+            credits_used,
+            reservation_id
+        )
+
         raise HTTPException(
             status_code=502,
             detail="Cloudflare image generation failed."
         )
+        
             
 
 @app.get("/studiolm-check")
