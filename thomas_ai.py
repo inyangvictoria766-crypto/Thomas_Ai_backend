@@ -2285,9 +2285,24 @@ def generate_image(
 
     # HIGH QUALITY: OPENAI
     if quality == "high":
+    budget_reserved = reserve_provider_budget(
+        "openai",
+        reservation_id,
+        OPENAI_MAX_IMAGE_RESERVATION_USD
+    )
 
-        api_key = os.getenv("OPENAI_API_KEY")
+    if not budget_reserved:
+        refund_credits(
+            current_user["user_id"],
+            credits_used,
+            reservation_id
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="OpenAI generation budget is unavailable."
+        )
 
+    api_key = os.getenv("OPENAI_API_KEY")
         try:
             if not api_key:
                 raise HTTPException(
@@ -2364,21 +2379,24 @@ except Exception as accounting_error:
             raise
 
         except Exception as error:
-            print("OPENAI IMAGE ERROR:", repr(error), flush=True)
+            print(
+                "OPENAI IMAGE ERROR:",
+                repr(error),
+                flush=True
+            )
+
+            release_provider_budget(reservation_id)
+
             refund_credits(
                 current_user["user_id"],
-                reservation_id,
-                quality
+                credits_used,
+                reservation_id
             )
+
             raise HTTPException(
                 status_code=502,
                 detail="OpenAI image generation failed."
-            )
-            print("OPENAI IMAGE ERROR:", repr(error), flush=True)
-            raise HTTPException(
-                status_code=502,
-                detail="OpenAI image generation failed."
-            )
+)
     # LOW AND MEDIUM: CLOUDFLARE
 
     api_token = os.getenv("CLOUDFLARE_API_TOKEN")
