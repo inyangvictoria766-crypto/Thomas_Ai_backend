@@ -2518,7 +2518,8 @@ except Exception as accounting_error:
         }
 
     
-        except HTTPException:
+        
+    except HTTPException:
         if not cloudflare_generation_succeeded:
             release_provider_budget(reservation_id)
 
@@ -2548,7 +2549,8 @@ except Exception as accounting_error:
         raise HTTPException(
             status_code=502,
             detail="Cloudflare image generation failed."
-)
+        )
+        
 
         release_provider_budget(reservation_id)
 
