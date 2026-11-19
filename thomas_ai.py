@@ -2313,7 +2313,8 @@ def generate_image(
             except Exception as error:
                 print("OPENAI COST ERROR:", repr(error), flush=True)
                 openai_cost = None
-            try:
+try:
+    
     record_generation(
         current_user["user_id"],
         quality,
