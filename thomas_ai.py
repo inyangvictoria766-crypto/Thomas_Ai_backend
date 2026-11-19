@@ -852,6 +852,7 @@ def refund_credits(user_id, reservation_id, quality):
 
 
 
+
 def record_generation(
     user_id,
     quality,
@@ -865,22 +866,40 @@ def record_generation(
     try:
         from decimal import Decimal, ROUND_HALF_UP
 
+        if provider_cost_usd is None:
+            print(
+                "ACCOUNTING PENDING: Provider cost unavailable.",
+                flush=True
+            )
+            return False
+
+        cost = Decimal(str(provider_cost_usd))
+
+        if not cost.is_finite() or cost <= 0:
+            print(
+                "ACCOUNTING PENDING: Invalid or zero provider cost.",
+                flush=True
+            )
+            return False
+
+        cost_minor = int(
+            (cost * Decimal("100000000")).quantize(
+                Decimal("1"),
+                rounding=ROUND_HALF_UP
+            )
+        )
+
+        if cost_minor <= 0:
+            raise ValueError("Provider cost is below accounting precision.")
+
+        description = f"{provider} usage: {model}"
+
         connection = psycopg2.connect(
             os.getenv("DATABASE_URL")
         )
 
         with connection:
             with connection.cursor() as cursor:
-
-                print(
-                    "GENERATION TRACKING:",
-                    user_id,
-                    quality,
-                    provider,
-                    reservation_id,
-                    model,
-                    flush=True
-                )
 
                 cursor.execute("""
                     INSERT INTO generation_history (
@@ -893,200 +912,257 @@ def record_generation(
                         provider_cost_usd,
                         accounting_status
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (
+                        %s, %s, %s, 'success',
+                        %s, %s, %s, 'pending'
+                    )
                     ON CONFLICT (reservation_id)
                     WHERE reservation_id IS NOT NULL
-                    DO NOTHING
-                    RETURNING id;
+                    DO NOTHING;
                 """, (
                     user_id,
                     quality,
                     provider,
-                    "success",
                     reservation_id,
                     model,
-                    provider_cost_usd,
-                    "pending"
+                    cost,
                 ))
 
-                history_inserted = cursor.fetchone() is not None
+                cursor.execute("""
+                    SELECT
+                        user_id,
+                        provider,
+                        model,
+                        provider_cost_usd,
+                        accounting_status
+                    FROM generation_history
+                    WHERE reservation_id = %s
+                    FOR UPDATE;
+                """, (reservation_id,))
 
-                if not history_inserted:
-                    print(
-                        "DUPLICATE GENERATION: accounting skipped",
-                        flush=True
+                history = cursor.fetchone()
+
+                if not history:
+                    raise ValueError(
+                        "Generation history record not found."
                     )
-                    return
 
-                if provider_cost_usd is not None:
+                if (
+                    str(history[0]) != str(user_id)
+                    or history[1] != provider
+                    or history[2] != model
+                    or Decimal(str(history[3])) != cost
+                ):
+                    raise ValueError(
+                        "Existing generation record does not match."
+                    )
 
-                    cost = Decimal(str(provider_cost_usd))
+                cursor.execute("""
+                    SELECT provider, estimated_cost_minor, actual_cost_minor, status
+                    FROM provider_cost_reservations
+                    WHERE reservation_id = %s
+                    FOR UPDATE;
+                """, (reservation_id,))
 
-                    if not cost.is_finite() or cost < 0:
-                        raise ValueError("Invalid provider cost.")
+                reservation = cursor.fetchone()
 
-                    if cost > 0:
+                if not reservation or reservation[0] != provider:
+                    raise ValueError(
+                        "Matching provider reservation not found."
+                    )
 
-                        cost_minor = int(
-                            (cost * Decimal("100000000")).quantize(
-                                Decimal("1"),
-                                rounding=ROUND_HALF_UP
-                            )
+                if reservation[3] == "released":
+                    raise ValueError(
+                        "Provider reservation was already released."
+                    )
+
+                if reservation[3] == "settled":
+                    if reservation[2] != cost_minor:
+                        raise ValueError(
+                            "Settled reservation cost does not match."
                         )
 
-                        description = f"{provider} usage: {model}"
+                    cursor.execute("""
+                        UPDATE generation_history
+                        SET accounting_status = 'recorded'
+                        WHERE reservation_id = %s;
+                    """, (reservation_id,))
 
-                        cursor.execute("""
-                            INSERT INTO provider_accounts (
-                                provider,
-                                currency,
-                                balance_minor,
-                                unit_scale
-                            )
-                            VALUES (%s, 'USD', 0, 100000000)
-                            ON CONFLICT (provider)
-                            DO NOTHING;
-                        """, (provider,))
+                    print(
+                        "GENERATION ACCOUNTING ALREADY SETTLED",
+                        flush=True
+                    )
+                    return True
 
-                        cursor.execute("""
-                            INSERT INTO provider_transactions (
-                                provider,
-                                transaction_type,
-                                amount_minor,
-                                currency,
-                                unit_scale,
-                                source_reference,
-                                description
-                            )
-                            VALUES (
-                                %s, 'usage', %s, 'USD',
-                                100000000, %s, %s
-                            )
-                            ON CONFLICT (
-                                provider,
-                                transaction_type,
-                                source_reference
-                            )
-                            WHERE source_reference IS NOT NULL
-                            DO NOTHING
-                            RETURNING id;
-                        """, (
+                cursor.execute("""
+                    INSERT INTO provider_accounts (
+                        provider,
+                        currency,
+                        balance_minor,
+                        unit_scale
+                    )
+                    VALUES (%s, 'USD', 0, 100000000)
+                    ON CONFLICT (provider)
+                    DO NOTHING;
+                """, (provider,))
+
+                cursor.execute("""
+                    INSERT INTO provider_transactions (
+                        provider,
+                        transaction_type,
+                        amount_minor,
+                        currency,
+                        unit_scale,
+                        source_reference,
+                        description
+                    )
+                    VALUES (
+                        %s, 'usage', %s, 'USD',
+                        100000000, %s, %s
+                    )
+                    ON CONFLICT (
+                        provider,
+                        transaction_type,
+                        source_reference
+                    )
+                    WHERE source_reference IS NOT NULL
+                    DO NOTHING
+                    RETURNING id;
+                """, (
+                    provider,
+                    cost_minor,
+                    str(reservation_id),
+                    description
+                ))
+
+                usage_inserted = cursor.fetchone() is not None
+
+                if not usage_inserted:
+                    cursor.execute("""
+                        SELECT provider, amount_minor, currency
+                        FROM provider_transactions
+                        WHERE provider = %s
+                          AND transaction_type = 'usage'
+                          AND source_reference = %s;
+                    """, (provider, str(reservation_id)))
+
+                    existing_usage = cursor.fetchone()
+
+                    if (
+                        not existing_usage
+                        or existing_usage[0] != provider
+                        or existing_usage[1] != cost_minor
+                        or existing_usage[2] != "USD"
+                    ):
+                        raise ValueError(
+                            "Existing provider usage transaction does not match."
+                        )
+
+                if usage_inserted:
+
+                    cursor.execute("""
+                        UPDATE provider_accounts
+                        SET
+                            balance_minor = balance_minor - %s,
+                            updated_at = NOW()
+                        WHERE provider = %s
+                          AND currency = 'USD';
+                    """, (cost_minor, provider))
+
+                    cursor.execute("""
+                        INSERT INTO provider_funding (
                             provider,
-                            cost_minor,
-                            str(reservation_id),
-                            description
-                        ))
+                            currency,
+                            funded_amount_minor,
+                            spent_amount_minor,
+                            low_balance_threshold_minor
+                        )
+                        VALUES (
+                            %s, 'USD', 0, %s, 100000000
+                        )
+                        ON CONFLICT (provider, currency)
+                        DO UPDATE SET
+                            spent_amount_minor =
+                                provider_funding.spent_amount_minor
+                                + EXCLUDED.spent_amount_minor,
+                            updated_at = NOW();
+                    """, (provider, cost_minor))
 
-                        usage_inserted = cursor.fetchone() is not None
+                    cursor.execute("""
+                        INSERT INTO business_ledger (
+                            entry_type,
+                            direction,
+                            amount_minor,
+                            currency,
+                            unit_scale,
+                            source,
+                            source_reference,
+                            description,
+                            metadata
+                        )
+                        VALUES (
+                            'provider_usage',
+                            'expense',
+                            %s,
+                            'USD',
+                            100000000,
+                            'provider',
+                            %s,
+                            %s,
+                            jsonb_build_object(
+                                'provider', %s,
+                                'model', %s,
+                                'user_id', %s
+                            )
+                        )
+                        ON CONFLICT (
+                            source,
+                            source_reference,
+                            entry_type
+                        )
+                        DO NOTHING;
+                    """, (
+                        cost_minor,
+                        str(reservation_id),
+                        description,
+                        provider,
+                        model,
+                        str(user_id)
+                    ))
 
-                        if usage_inserted:
+                cursor.execute("""
+                    UPDATE provider_cost_reservations
+                    SET
+                        actual_cost_minor = %s,
+                        status = 'settled',
+                        updated_at = NOW()
+                    WHERE reservation_id = %s
+                      AND provider = %s
+                      AND status = 'reserved'
+                    RETURNING id;
+                """, (
+                    cost_minor,
+                    reservation_id,
+                    provider
+                ))
 
-                            cursor.execute("""
-                                UPDATE provider_accounts
-                                SET
-                                    balance_minor = balance_minor - %s,
-                                    updated_at = NOW()
-                                WHERE provider = %s
-                                  AND currency = 'USD';
-                            """, (cost_minor, provider))
+                if cursor.fetchone() is None:
+                    raise ValueError(
+                        "Provider reservation could not be settled."
+                    )
 
-                            cursor.execute("""
-                                INSERT INTO provider_funding (
-                                    provider,
-                                    currency,
-                                    funded_amount_minor,
-                                    spent_amount_minor,
-                                    low_balance_threshold_minor
-                                )
-                                VALUES (
-                                    %s, 'USD', 0, %s, 100000000
-                                )
-                                ON CONFLICT (provider, currency)
-                                DO UPDATE SET
-                                    spent_amount_minor =
-                                        provider_funding.spent_amount_minor
-                                        + EXCLUDED.spent_amount_minor,
-                                    updated_at = NOW();
-                            """, (provider, cost_minor))
-
-                            cursor.execute("""
-                                INSERT INTO business_ledger (
-                                    entry_type,
-                                    direction,
-                                    amount_minor,
-                                    currency,
-                                    unit_scale,
-                                    source,
-                                    source_reference,
-                                    description,
-                                    metadata
-                                )
-                                VALUES (
-                                    'provider_usage',
-                                    'expense',
-                                    %s,
-                                    'USD',
-                                    100000000,
-                                    'provider',
-                                    %s,
-                                    %s,
-                                    jsonb_build_object(
-                                        'provider', %s,
-                                        'model', %s,
-                                        'user_id', %s
-                                    )
-                                )
-                                ON CONFLICT (
-                                    source,
-                                    source_reference,
-                                    entry_type
-                                )
-                                DO NOTHING;
-                            """, (
-                                cost_minor,
-                                str(reservation_id),
-                                description,
-                                provider,
-                                model,
-                                str(user_id)
-                            ))
-
-                            
-# Settle the reservation in this same transaction.
-cursor.execute("""
-    UPDATE provider_cost_reservations
-    SET
-        actual_cost_minor = %s,
-        status = 'settled',
-        updated_at = NOW()
-    WHERE reservation_id = %s
-      AND provider = %s
-      AND status = 'reserved'
-    RETURNING id;
-""", (
-    cost_minor,
-    reservation_id,
-    provider
-))
-
-reservation_settled = cursor.fetchone() is not None
-
-if not reservation_settled:
-    raise ValueError(
-        "Provider reservation could not be settled."
-    )
-
-cursor.execute("""
-    UPDATE generation_history
-    SET accounting_status = 'recorded'
-    WHERE reservation_id = %s;
-""", (reservation_id,))
-
+                cursor.execute("""
+                    UPDATE generation_history
+                    SET accounting_status = 'recorded'
+                    WHERE reservation_id = %s;
+                """, (reservation_id,))
 
                 print(
-                    "GENERATION TRACKING SAVED",
+                    "GENERATION ACCOUNTING RECORDED",
                     flush=True
                 )
+
+                return True
 
     except Exception as error:
         print(
@@ -1094,10 +1170,14 @@ cursor.execute("""
             repr(error),
             flush=True
         )
-          
+        return False
+
     finally:
         if connection is not None:
             connection.close()
+
+
+                            
 
         
      
