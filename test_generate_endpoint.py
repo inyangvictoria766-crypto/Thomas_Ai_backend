@@ -1,4 +1,4 @@
-
+import os
 import unittest
 from unittest.mock import patch, MagicMock
 from types import SimpleNamespace
@@ -14,6 +14,12 @@ class GenerateEndpointTests(unittest.TestCase):
             "user_id": "test-user",
             "credits": 100
         }
+        self.env_patch = patch.dict(os.environ, {
+            "OPENAI_API_KEY": "test-openai-key",
+            "CLOUDFLARE_API_TOKEN": "test-cloudflare-token",
+            "CLOUDFLARE_ACCOUNT_ID": "test-cloudflare-account"
+        })
+        self.env_patch.start()
 
         self.request = thomas_ai.ImageRequest(
             prompt="A futuristic city",
@@ -50,6 +56,8 @@ class GenerateEndpointTests(unittest.TestCase):
     def tearDown(self):
         for p in self.patches:
             p.stop()
+
+        self.env_patch.stop()
 
     def make_openai(self, image="fake-image-data"):
         client = MagicMock()
