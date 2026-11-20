@@ -1,1 +1,27 @@
 
+name: Thomas AI Accounting Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  accounting-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PostgreSQL driver
+        run: pip install psycopg2-binary
+
+      - name: Run accounting test
+        env:
+          NEON_TEST_DATABASE_URL: ${{ secrets.NEON_TEST_DATABASE_URL }}
+        run: python test_accounting.py
+        
