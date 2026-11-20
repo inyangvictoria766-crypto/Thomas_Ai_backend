@@ -447,7 +447,7 @@ try:
             assert ledger == 1
             assert reservation == ("settled", cost_minor)
 
-            print("ALL ACCOUNTING TESTS PASSEDl")00
+            print("ALL ACCOUNTING TESTS PASSEDl")
 
     finally:
         check.close()
