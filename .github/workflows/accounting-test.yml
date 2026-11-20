@@ -30,5 +30,5 @@ jobs:
       - name: Run provider settlement tests
         env:
           NEON_TEST_DATABASE_URL: ${{ secrets.NEON_TEST_DATABASE_URL }}
-        run: python test_provider_settlement.pytt
+        run: python test_provider_settlement.py
         
