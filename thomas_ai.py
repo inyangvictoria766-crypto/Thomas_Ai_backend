@@ -122,13 +122,18 @@ def reserve_provider_budget(
 
     estimated = Decimal(str(estimated_cost))
 
-    if not estimated.is_finite() or estimated < 0:
+    if not estimated.is_finite() or estimated <= 0:
         raise ValueError("Invalid provider cost estimate.")
 
     estimated_minor = int(
-        (estimated * Decimal("100000000"))
-        .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        (estimated * Decimal("100000000")).quantize(
+            Decimal("1"),
+            rounding=ROUND_HALF_UP
+        )
     )
+
+    if estimated_minor <= 0:
+        raise ValueError("Provider estimate is below accounting precision.")
 
     connection = psycopg2.connect(os.getenv("DATABASE_URL"))
 
@@ -142,42 +147,40 @@ def reserve_provider_budget(
                         currency
                     )
                     VALUES (%s, 'USD')
-                    ON CONFLICT (provider, currency) DO NOTHING
+                    ON CONFLICT (provider, currency) DO NOTHING;
                 """, (provider,))
 
                 cur.execute("""
-                    SELECT
-                        funded_amount_minor,
-                        spent_amount_minor
+                    SELECT funded_amount_minor, spent_amount_minor
                     FROM provider_funding
                     WHERE provider = %s
                       AND currency = 'USD'
-                    FOR UPDATE
+                    FOR UPDATE;
                 """, (provider,))
 
-                row = cur.fetchone()
+                funding = cur.fetchone()
 
-                if not row:
+                if not funding:
                     raise ValueError("Provider funding record missing.")
 
-                funded, spent = row
+                funded, spent = funding
 
                 cur.execute("""
-                    SELECT
-                        estimated_cost_minor,
-                        status
+                    SELECT provider, estimated_cost_minor, status
                     FROM provider_cost_reservations
                     WHERE reservation_id = %s
+                    FOR UPDATE;
                 """, (reservation_id,))
 
                 existing = cur.fetchone()
 
                 if existing:
-                    existing_estimate, existing_status = existing
+                    existing_provider, existing_estimate, existing_status = existing
 
                     return (
-                        existing_status == "reserved"
+                        existing_provider == provider
                         and existing_estimate == estimated_minor
+                        and existing_status == "reserved"
                     )
 
                 cur.execute("""
@@ -186,11 +189,10 @@ def reserve_provider_budget(
                     )
                     FROM provider_cost_reservations
                     WHERE provider = %s
-                      AND status = 'reserved'
+                      AND status = 'reserved';
                 """, (provider,))
 
                 pending = cur.fetchone()[0]
-
                 available = funded - spent - pending
 
                 if available < estimated_minor:
@@ -202,7 +204,7 @@ def reserve_provider_budget(
                         provider,
                         estimated_cost_minor
                     )
-                    VALUES (%s, %s, %s)
+                    VALUES (%s, %s, %s);
                 """, (
                     reservation_id,
                     provider,
@@ -2381,6 +2383,8 @@ def generate_image(
     request: ImageRequest,
     current_user: dict = Depends(get_authenticated_user)
 ):
+    from decimal import Decimal
+
     request_started = time.perf_counter()
     prompt = request.prompt.strip()
     quality = request.quality.lower().strip()
@@ -2396,7 +2400,8 @@ def generate_image(
             status_code=400,
             detail="Invalid image quality."
         )
-     # RESERVE CREDITS
+
+    # 1. RESERVE CUSTOMER CREDITS
     credits_used = CREDIT_COSTS[quality]
 
     new_balance, reservation_id = reserve_credits(
@@ -2405,15 +2410,40 @@ def generate_image(
         quality
     )
 
-    # HIGH QUALITY: OPENAI
+    # 2. SELECT PROVIDER
     if quality == "high":
-        openai_generation_succeeded = False
+        provider = "openai"
+        model = "gpt-image-2.5-flare"
+        estimated_cost = OPENAI_MAX_IMAGE_RESERVATION_USD
+    else:
+        provider = "cloudflare"
+        model = "@cf/black-forest-labs/flux-1-schnell"
+        estimated_cost = Decimal("0.0006336")
 
+    # 3. RESERVE PROVIDER BUDGET
+    try:
         budget_reserved = reserve_provider_budget(
-             "openai",
-              reservation_id,
-             OPENAI_MAX_IMAGE_RESERVATION_USD
-         )
+            provider,
+            reservation_id,
+            estimated_cost
+        )
+    except Exception as error:
+        print(
+            "PROVIDER BUDGET ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        refund_credits(
+            current_user["user_id"],
+            reservation_id,
+            quality
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail="Provider budget could not be reserved."
+        )
 
     if not budget_reserved:
         refund_credits(
@@ -2421,20 +2451,28 @@ def generate_image(
             reservation_id,
             quality
         )
+
         raise HTTPException(
             status_code=503,
-            detail="OpenAI generation budget is unavailable."
+            detail=f"{provider} generation budget is unavailable."
         )
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    
-        try:
+    # 4. GENERATE IMAGE
+    provider_generation_succeeded = False
+
+    try:
+
+        # HIGH QUALITY: OPENAI
+        if provider == "openai":
+
+            api_key = os.getenv("OPENAI_API_KEY")
+
             if not api_key:
                 raise HTTPException(
                     status_code=500,
                     detail="OpenAI API key is missing."
                 )
-            
+
             client = OpenAI(
                 api_key=api_key,
                 timeout=180.0,
@@ -2442,95 +2480,130 @@ def generate_image(
             )
 
             response = client.images.generate(
-                model="gpt-image-2.5-flare",
-                 prompt=prompt,
-                 quality="high",
-                 size="1024x1024",
-                 output_format="png",
-                 n=1
+                model=model,
+                prompt=prompt,
+                quality="high",
+                size="1024x1024",
+                output_format="png",
+                n=1
             )
-            openai_generation_succeeded = True
 
-            image_data = response.data[0].b64_json
-            openai_generation_succeeded = True
+            provider_generation_succeeded = True
+
             print(
                 "OPENAI REAL USAGE:",
-                 repr(response.usage),
-                 flush=True
-              )
-
-            if not image_data:
-                raise HTTPException(
-                    status_code=502,
-                    detail="OpenAI returned no image."
-                )
-
-            try:
-                openai_cost = get_openai_image_cost(
-                response.usage,
-                "gpt-image-2.5-flare"
-            )
-            except Exception as error:
-                print("OPENAI COST ERROR:", repr(error), flush=True)
-                openai_cost = None
-try:
-    
-    record_generation(
-        current_user["user_id"],
-        quality,
-        "openai",
-        reservation_id,
-        "gpt-image-2.5-flare",
-        openai_cost
-    )
-
-except Exception as accounting_error:
-    print(
-        "OPENAI POST-GENERATION ACCOUNTING ERROR:",
-        repr(accounting_error),
-        flush=True
-    )
-            return {
-                "image": image_data,
-                "provider": "openai",
-                "quality": "high",
-                "status": "success"
-            }
-
-         except HTTPException:
-            if not openai_generation_succeeded:
-                release_provider_budget(reservation_id)
-
-                refund_credits(
-                    current_user["user_id"],
-                    reservation_id,
-                    quality
-                )
-            raise
-
-        except Exception as error:
-            print(
-                "OPENAI IMAGE ERROR:",
-                repr(error),
+                repr(response.usage),
                 flush=True
             )
 
-            if not openai_generation_succeeded:
-                release_provider_budget(reservation_id)
+            image_data = (
+                response.data[0].b64_json
+                if response.data
+                else None
+            )
 
-                refund_credits(
-                    current_user["user_id"],
-                    reservation_id,
-                    quality
+            try:
+                provider_cost = get_openai_image_cost(
+                    response.usage,
+                    model
+                )
+            except Exception as error:
+                print(
+                    "OPENAI COST ERROR:",
+                    repr(error),
+                    flush=True
+                )
+                provider_cost = None
+
+        # LOW AND MEDIUM: CLOUDFLARE
+        else:
+
+            api_token = os.getenv("CLOUDFLARE_API_TOKEN")
+            account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+
+            if not api_token or not account_id:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Cloudflare credentials are missing."
                 )
 
-            raise HTTPException(
-                status_code=502,
-                detail="OpenAI image generation failed."
+            cloudflare_started = time.perf_counter()
+
+            response = requests.post(
+                f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}",
+                headers={
+                    "Authorization": f"Bearer {api_token}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "prompt": prompt,
+                    "steps": 4
+                },
+                timeout=150
             )
 
-            release_provider_budget(reservation_id)
+            response.raise_for_status()
 
+            cloudflare_seconds = (
+                time.perf_counter() - cloudflare_started
+            )
+
+            print(
+                f"CLOUDFLARE GENERATION: {cloudflare_seconds:.2f} seconds",
+                flush=True
+            )
+
+            result = response.json()
+
+            if not result.get("success"):
+                raise HTTPException(
+                    status_code=502,
+                    detail="Cloudflare image generation failed."
+                )
+
+            provider_generation_succeeded = True
+
+            image_data = result.get("result", {}).get("image")
+
+            try:
+                provider_cost = get_cloudflare_generation_cost(
+                    model=model,
+                    steps=4,
+                    tiles=4
+                )
+            except Exception as error:
+                print(
+                    "CLOUDFLARE COST ERROR:",
+                    repr(error),
+                    flush=True
+                )
+                provider_cost = None
+
+        # 5. HANDLE MISSING IMAGE
+        if not image_data:
+
+            print(
+                "PROVIDER SUCCEEDED BUT RETURNED NO IMAGE DATA.",
+                flush=True
+            )
+
+            accounting_recorded = record_generation(
+                current_user["user_id"],
+                quality,
+                provider,
+                reservation_id,
+                model,
+                provider_cost
+            )
+
+            print(
+                "ACCOUNTING RESULT:",
+                accounting_recorded,
+                flush=True
+            )
+
+            # Customer receives a refund because no image was delivered.
+            # Provider cost reservation is NOT released.
             refund_credits(
                 current_user["user_id"],
                 reservation_id,
@@ -2539,110 +2612,12 @@ except Exception as accounting_error:
 
             raise HTTPException(
                 status_code=502,
-                detail="OpenAI image generation failed."
-)
-    # LOW AND MEDIUM: CLOUDFLARE
-
-    api_token = os.getenv("CLOUDFLARE_API_TOKEN")
-    account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID")
-    cloudflare_generation_succeeded = False
-    cloudflare_budget_reserved = reserve_provider_budget(
-    "cloudflare",
-    reservation_id,
-    Decimal("0.0006336")
-)
-
-    if not cloudflare_budget_reserved:
-        refund_credits(
-            current_user["user_id"],
-            reservation_id,
-            quality
-        )
-        raise HTTPException(
-            status_code=503,
-            detail="Cloudflare generation budget is unavailable."
-        )
-
-    
-
-    try:
-        if not api_token or not account_id:
-            raise HTTPException(
-                status_code=500,
-                detail="Cloudflare credentials are missing."
+                detail="The provider returned no image."
             )
-        cloudflare_started = time.perf_counter()
-        response = requests.post(
-            f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/black-forest-labs/flux-1-schnell",
-            headers={
-                "Authorization": f"Bearer {api_token}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "prompt": prompt,
-                "steps": 4
-            },
-            timeout=150
-        )
 
-        response.raise_for_status()
-        cloudflare_seconds = (
-            time.perf_counter() - cloudflare_started
-        )
-
-        print(
-            f"CLOUDFLARE GENERATION: {cloudflare_seconds:.2f} seconds",
-            flush=True
-        )
-
-        result = response.json()
-
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=502,
-                detail="Cloudflare image generation failed."
-            )
-        cloudflare_generation_succeeded = True
-        
-        image_data = result["result"]["image"]
-        cloudflare_steps = 4
-        cloudflare_tiles = 4
-
-        cloudflare_cost_usd = get_cloudflare_generation_cost(
-            model="@cf/black-forest-labs/flux-1-schnell",
-            steps=cloudflare_steps,
-            tiles=cloudflare_tiles
-        )
-
-        total_seconds = time.perf_counter() - request_started
-
-        print(
-            f"TOTAL BACKEND TIME: {total_seconds:.2f} seconds",
-            flush=True
-        )
-
-
-        record_generation(
-    current_user["user_id"],
-    quality,
-    "cloudflare",
-    reservation_id,
-    "@cf/black-forest-labs/flux-1-schnell",
-    cloudflare_cost_usd
-)
-        
-
-        return {
-            "image": image_data,
-            "provider": "cloudflare",
-            "quality": quality,
-            "status": "success"
-        }
-
-    
-        
     except HTTPException:
-        if not cloudflare_generation_succeeded:
+        if not provider_generation_succeeded:
+
             release_provider_budget(reservation_id)
 
             refund_credits(
@@ -2650,16 +2625,19 @@ except Exception as accounting_error:
                 reservation_id,
                 quality
             )
+
         raise
 
     except Exception as error:
+
         print(
-            "CLOUDFLARE ERROR:",
+            f"{provider.upper()} IMAGE ERROR:",
             repr(error),
             flush=True
         )
 
-        if not cloudflare_generation_succeeded:
+        if not provider_generation_succeeded:
+
             release_provider_budget(reservation_id)
 
             refund_credits(
@@ -2670,22 +2648,51 @@ except Exception as accounting_error:
 
         raise HTTPException(
             status_code=502,
-            detail="Cloudflare image generation failed."
+            detail=f"{provider} image generation failed."
         )
+
+    # 6. RECORD ACTUAL PROVIDER COST
+    try:
+        accounting_recorded = record_generation(
+            current_user["user_id"],
+            quality,
+            provider,
+            reservation_id,
+            model,
+            provider_cost
+        )
+
+        if not accounting_recorded:
+            print(
+                "WARNING: GENERATION SUCCEEDED BUT ACCOUNTING IS PENDING.",
+                flush=True
+            )
+
+    except Exception as accounting_error:
+        print(
+            "POST-GENERATION ACCOUNTING ERROR:",
+            repr(accounting_error),
+            flush=True
+        )
+
+    # 7. RETURN IMAGE
+    total_seconds = time.perf_counter() - request_started
+
+    print(
+        f"TOTAL BACKEND TIME: {total_seconds:.2f} seconds",
+        flush=True
+    )
+
+    return {
+        "image": image_data,
+        "provider": provider,
+        "quality": quality,
+        "status": "success"
+                }
+
+
         
 
-        release_provider_budget(reservation_id)
-
-        refund_credits(
-            current_user["user_id"],
-            reservation_id,
-            quality
-        )
-
-        raise HTTPException(
-            status_code=502,
-            detail="Cloudflare image generation failed."
-        )
         
             
 
