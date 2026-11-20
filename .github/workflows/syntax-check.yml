@@ -17,4 +17,4 @@ jobs:
           python-version: "3.12"
 
       - name: Check Python syntax
-        run: python -m py_compile Thomas_ai_backend.py
+        run: python -m py_compile thomas_ai.py
