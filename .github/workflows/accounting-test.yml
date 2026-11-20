@@ -31,4 +31,8 @@ jobs:
         env:
           NEON_TEST_DATABASE_URL: ${{ secrets.NEON_TEST_DATABASE_URL }}
         run: python test_provider_settlement.py
+      - name: Run refund tests
+        env:
+          NEON_TEST_DATABASE_URL: ${{ secrets.NEON_TEST_DATABASE_URL }}
+        run: python test_refund.py
         
