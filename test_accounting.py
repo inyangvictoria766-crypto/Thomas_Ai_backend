@@ -447,20 +447,7 @@ try:
             assert ledger == 1
             assert reservation == ("settled", cost_minor)
 
-            print("ALL ACCOUNTING TESTS PASSED!")
-            
-            # TEST: settle_provider_budget()
-
-                                
-finally:
-    if not test_connection.closed:
-        test_connection.close()
-
-            
-            
-    
-
-    
+            print("ALL ACCOUNTING TESTS PASSEDl")00
 
     finally:
         check.close()
