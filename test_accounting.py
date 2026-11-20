@@ -448,6 +448,124 @@ try:
             assert reservation == ("settled", cost_minor)
 
             print("ALL ACCOUNTING TESTS PASSED!")
+            
+            # TEST: settle_provider_budget()
+
+            settle_provider = "settle_" + uuid.uuid4().hex[:12]
+            settle_reservation = str(uuid.uuid4())
+            settle_cost = Decimal("0.00123456")
+
+             settle_minor = int(
+                (settle_cost * Decimal("100000000")).quantize(
+                    Decimal("1"),
+                    rounding=ROUND_HALF_UP
+                )
+             )
+
+            missing_usage_reservation = str(uuid.uuid4())
+
+            budget_test = psycopg2.connect(DATABASE_URL)
+
+            try:
+                with budget_test:
+                    with budget_test.cursor() as cursor:
+                        cursor.execute("""
+                            INSERT INTO provider_cost_reservations (
+                                reservation_id,
+                                provider,
+                                estimated_cost_minor,
+                                status
+                            )
+                            VALUES (%s, %s, %s, 'reserved')
+                        """, (settle_reservation, settle_provider, 200000))
+
+                        cursor.execute("""
+                            INSERT INTO provider_transactions (
+                              provider,
+                               transaction_type,
+                               amount_minor,
+                                currency,
+                                unit_scale,
+                                source_reference,
+                                description
+                            )
+                            VALUES (
+                                %s, 'usage', %s, 'USD',
+                                100000000, %s, 'Settlement test'
+                            )
+                        """, (settle_provider, settle_minor, settle_reservation))
+
+                        cursor.execute("""
+                            INSERT INTO provider_cost_reservations (
+                                reservation_id,
+                                provider,
+                                estimated_cost_minor,
+                                status
+                            )
+                            VALUES (%s, %s, %s, 'reserved')
+                        """, (missing_usage_reservation, settle_provider, 200000))
+
+            finally:
+                budget_test.close()
+
+             first_settlement = thomas_ai.settle_provider_budget(
+                 settle_reservation, settle_cost
+             )
+             assert first_settlement is True
+
+             second_settlement = thomas_ai.settle_provider_budget(
+                settle_reservation, settle_cost
+            )
+            assert second_settlement is False
+
+            missing_usage_result = thomas_ai.settle_provider_budget(
+                missing_usage_reservation, settle_cost
+            )
+            assert missing_usage_result is False
+
+            try:
+                thomas_ai.settle_provider_budget(
+                    settle_reservation, Decimal("-0.01")
+                )
+                raise AssertionError("Negative cost was accepted.")
+            except ValueError:
+                pass
+
+            verify = psycopg2.connect(DATABASE_URL)
+
+            try:
+                with verify.cursor() as cursor:
+                    cursor.execute("""
+                         SELECT status, actual_cost_minor
+                         FROM provider_cost_reservations
+                         WHERE reservation_id = %s
+                    """, (settle_reservation,))
+
+                    assert cursor.fetchone() == ("settled", settle_minor)
+
+                    cursor.execute("""
+                        SELECT status, actual_cost_minor
+                        FROM provider_cost_reservations
+                        WHERE reservation_id = %s
+                    """, (missing_usage_reservation,))
+
+                    assert cursor.fetchone() == ("reserved", None)
+
+            finally:
+                verify.close()
+
+            print("PROVIDER SETTLEMENT TESTS PASSED!")
+            print("ALL ACCOUNTING TESTS PASSED!")
+#######
+finally:
+    if not test_connection.closed:
+        test_connection.close()
+
+            
+            
+    
+
+    
 
     finally:
         check.close()
