@@ -1,15 +1,15 @@
 
-name: Thomas AI Accounting Test
+name: Thomas AI Backend Tests
 
 "on":
   workflow_dispatch:
 
 jobs:
-  accounting-test:
+  backend-tests:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get repository code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -17,11 +17,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install PostgreSQL driver
-        run: pip install psycopg2-binary
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-      - name: Run accounting test
+      - name: Run accounting tests
         env:
           NEON_TEST_DATABASE_URL: ${{ secrets.NEON_TEST_DATABASE_URL }}
         run: python test_accounting.py
+
+      - name: Run generation endpoint tests
+        run: python -m unittest -v test_generate_endpoint
         
