@@ -454,8 +454,7 @@ try:
             settle_provider = "settle_" + uuid.uuid4().hex[:12]
             settle_reservation = str(uuid.uuid4())
             settle_cost = Decimal("0.00123456")
-
-             settle_minor = int(
+            settle_minor = int(
                 (settle_cost * Decimal("100000000")).quantize(
                     Decimal("1"),
                     rounding=ROUND_HALF_UP
