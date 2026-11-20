@@ -336,6 +336,8 @@ if not DATABASE_URL:
 
 os.environ["DATABASE_URL"] = DATABASE_URL
 
+import thomas_ai
+
 test_connection = psycopg2.connect(DATABASE_URL)
 
 try:
@@ -374,7 +376,7 @@ try:
     test_connection.close()
 
     # First call: should record the usage.
-    first = record_generation(
+    first = thomas_ai.record_generation(
         user_id,
         "test",
         provider,
@@ -384,7 +386,7 @@ try:
     )
 
     # Second call: should not record a duplicate.
-    second = record_generation(
+    second = thomas_ai.record_generation(
         user_id,
         "test",
         provider,
