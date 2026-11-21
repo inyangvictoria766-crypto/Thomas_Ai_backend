@@ -2671,26 +2671,33 @@ def generate_image(
         )
 
     # 6. RECORD ACTUAL PROVIDER COST
-    try:
-        accounting_recorded = record_generation(
-            current_user["user_id"],
-            quality,
-            provider,
-            reservation_id,
-            model,
-            provider_cost
-        )
-
-        if not accounting_recorded:
-            print(
-                "WARNING: GENERATION SUCCEEDED BUT ACCOUNTING IS PENDING.",
-                flush=True
+    if provider_cost is not None:
+        try:
+            accounting_recorded = record_generation(
+                current_user["user_id"],
+                quality,
+                provider,
+                reservation_id,
+                model,
+                provider_cost
             )
 
-    except Exception as accounting_error:
+            if not accounting_recorded:
+                print(
+                    "WARNING: GENERATION SUCCEEDED BUT ACCOUNTING IS PENDING.",
+                    flush=True
+                )
+
+        except Exception as accounting_error:
+            print(
+                "POST-GENERATION ACCOUNTING ERROR:",
+                repr(accounting_error),
+                flush=True
+            )
+    else:
         print(
-            "POST-GENERATION ACCOUNTING ERROR:",
-            repr(accounting_error),
+            "WARNING: PROVIDER COST UNKNOWN. "
+            "RESERVATION REQUIRES RECONCILIATION.",
             flush=True
         )
 
