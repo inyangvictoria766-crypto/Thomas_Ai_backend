@@ -2568,20 +2568,34 @@ def generate_image(
             provider_generation_succeeded = True
 
             image_data = result.get("result", {}).get("image")
-
+        
             try:
                 provider_cost = get_cloudflare_generation_cost(
                     model=model,
                     steps=4,
                     output_tiles=4
                 )
+
             except Exception as error:
                 print(
                     "CLOUDFLARE COST ERROR:",
                     repr(error),
                     flush=True
                 )
-                provider_cost = None
+
+                release_provider_budget(reservation_id)
+
+                refund_credits(
+                    current_user["user_id"],
+                    reservation_id,
+                    quality
+                )
+
+                raise HTTPException(
+                    status_code=503,
+                    detail="Image pricing is temporarily unavailable."
+                )
+            
 
         # 5. HANDLE MISSING IMAGE
         if not image_data:
