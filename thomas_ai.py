@@ -2246,7 +2246,7 @@ def get_cloudflare_editing_cost(width, height):
         connection.close()
     
 
-def get_cloudflare_generation_cost(model, input_tiles, output_tiles):
+def get_cloudflare_generation_cost(model, steps, output_tiles):
     connection = psycopg2.connect(
         os.getenv("DATABASE_URL")
     )
@@ -2260,8 +2260,8 @@ def get_cloudflare_generation_cost(model, input_tiles, output_tiles):
             WHERE provider = 'cloudflare'
               AND model = %s
               AND feature IN (
-                  'image_editing_input',
-                  'image_editing_output'
+                  'image_generation_step',
+                  'image_generation_tile'
               )
         """, (model,))
 
@@ -2272,24 +2272,22 @@ def get_cloudflare_generation_cost(model, input_tiles, output_tiles):
             for row in rows
         }
 
-        input_price = pricing.get("image_editing_input")
-        output_price = pricing.get("image_editing_output")
+        step_price = pricing.get("image_generation_step")
+        tile_price = pricing.get("image_generation_tile")
 
-        if not input_price or not output_price:
+        if not step_price or not tile_price:
             raise ValueError("Cloudflare pricing is incomplete")
 
-        if input_price[1] != "USD" or output_price[1] != "USD":
+        if step_price[1] != "USD" or tile_price[1] != "USD":
             raise ValueError("Unexpected pricing currency")
 
         return (
-            input_tiles * input_price[0]
-            + output_tiles * output_price[0]
+            steps * step_price[0]
+            + output_tiles * tile_price[0]
         )
 
     finally:
         connection.close()
-        
-
 
 
 
