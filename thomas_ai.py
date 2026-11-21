@@ -2339,9 +2339,8 @@ def get_openai_image_cost(usage, model):
 
     output_tokens = getattr(usage, "output_tokens", None)
 
-    if input_details is None or output_details is None:
-        raise ValueError("OpenAI token details are incomplete.")
-
+    if input_details is None or output_tokens is None:
+    raise ValueError("OpenAI token details are incomplete.")
     text_tokens = getattr(input_details, "text_tokens", None)
     image_tokens = getattr(input_details, "image_tokens", None)
     image_output_tokens = output_tokens
