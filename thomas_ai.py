@@ -2613,6 +2613,13 @@ def generate_image(
                 status_code=502,
                 detail="The provider returned no image."
             )
+        
+        if not accounting_recorded:
+            print(
+              "CRITICAL: PROVIDER ACCOUNTING FAILED. "
+              "Reservation requires reconciliation.",
+               flush=True
+         )
 
     except HTTPException:
         if not provider_generation_succeeded:
