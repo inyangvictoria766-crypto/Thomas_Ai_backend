@@ -2216,6 +2216,69 @@ class ImageRequest(BaseModel):
 class CharacterReplaceRequest(BaseModel):
     video_url: str
     image_url: str
+    resolution: str = "480p"
+
+def submit_character_replacement(
+    video_url,
+    image_url,
+    resolution="480p"
+):
+    import os
+    import requests
+
+    api_key = os.getenv("AIMLAPI_API_KEY")
+
+    if not api_key:
+        raise ValueError("AIMLAPI_API_KEY is missing.")
+
+    response = requests.post(
+        "https://api.aimlapi.com/v2/video/generations",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "alibaba/wan2.2-14b-animate-replace",
+            "video_url": video_url,
+            "image_url": image_url,
+            "resolution": resolution
+        },
+        timeout=60
+    )
+
+    if response.status_code >= 400:
+        raise ValueError(
+            f"AI/ML API error: {response.text[:1000]}"
+        )
+
+    return response.json()
+
+def get_character_replacement_status(generation_id):
+    import osrequests
+    import 
+
+    api_key = os.getenv("AIMLAPI_API_KEY")
+
+    if not api_key:
+        raise ValueError("AIMLAPI_API_KEY is missing.")
+
+    response = requests.get(
+        "https://api.aimlapi.com/v2/video/generations",
+        headers={
+            "Authorization": f"Bearer {api_key}"
+        },
+        params={
+            "generation_id": generation_id
+        },
+        timeout=30
+    )
+
+    if response.status_code >= 400:
+        raise ValueError(
+            f"AI/ML API status error: {response.text[:1000]}"
+        )
+
+    return response.json()
 
 def get_provider_cost(provider, model, feature):
     connection = None
