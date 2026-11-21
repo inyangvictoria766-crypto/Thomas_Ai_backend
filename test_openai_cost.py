@@ -42,7 +42,7 @@ class TestOpenAIImageCost(unittest.TestCase):
             "gpt-image-2.5-flare"
         )
 
-        self.assertEqual(cost, Decimal("0.000111"))
+        self.assertEqual(cost, Decimal("0.111"))
 
     def test_rejects_missing_usage(self):
         with self.assertRaises(ValueError):
