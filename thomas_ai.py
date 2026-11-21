@@ -2530,11 +2530,12 @@ def generate_image(
             response = requests.post(
     f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}",
     headers={
-        "Authorization": f"Bearer {api_token}"
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json"
     },
-    files={
-        "prompt": (None, prompt),
-        "steps": (None, "4")
+    json={
+        "prompt": prompt,
+        "steps": 4
     },
     timeout=150
             )
