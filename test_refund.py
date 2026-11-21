@@ -13,7 +13,7 @@ os.environ["DATABASE_URL"] = DATABASE_URL
 
 
 def run_tests():
-    user_id = "refund_" + uuid.uuid4().hex[:12]
+    user_id = str(uuid.uuid4())
     reservation_id = str(uuid.uuid4())
 
     connection = psycopg2.connect(DATABASE_URL)
