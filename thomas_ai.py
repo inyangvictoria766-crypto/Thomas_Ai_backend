@@ -43,7 +43,7 @@ CREDIT_COSTS = {
     "high": 3
 }
 
-OPENAI_MAX_IMAGE_RESERVATION_USD = Decimal("0.10")
+OPENAI_MAX_IMAGE_RESERVATION_USD = Decimal("0.15")
 
 CREDIT_PACKAGES = {
     "starter": {
