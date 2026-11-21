@@ -2567,9 +2567,9 @@ def generate_image(
 
             try:
                 provider_cost = get_cloudflare_generation_cost(
-                    model=model,
-                    steps=4,
-                    tiles=4
+                         model=model,
+                          input_tiles=0,
+                          output_tiles=4
                 )
             except Exception as error:
                 print(
