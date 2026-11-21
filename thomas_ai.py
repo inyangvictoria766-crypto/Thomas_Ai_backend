@@ -2457,6 +2457,9 @@ def generate_image(
 
     # 4. GENERATE IMAGE
     provider_generation_succeeded = False
+    provider_cost = None
+    image_data = None
+    accounting_recorded = False
 
     try:
 
@@ -2585,10 +2588,7 @@ def generate_image(
                     flush=True
                 )
 
-                raise HTTPException(
-                    status_code=503,
-                    detail="Image pricing is temporarily unavailable."
-            )
+            
             
 
         # 5. HANDLE MISSING IMAGE
