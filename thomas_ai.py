@@ -40,7 +40,7 @@ cloudinary.config(
 CREDIT_COSTS = {
     "low": 1,
     "medium": 2,
-    "high": 3
+    "high": 7
 }
 
 OPENAI_MAX_IMAGE_RESERVATION_USD = Decimal("0.15")
