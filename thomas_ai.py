@@ -979,6 +979,9 @@ def record_generation(
                     WHERE reservation_id = %s
                     FOR UPDATE;
                 """, (reservation_id,))
+                
+                reservation = cursor.fetchone()
+                
 
                 
                 if not reservation or reservation[0] != provider:
