@@ -2337,10 +2337,10 @@ def get_openai_image_cost(usage, model):
         None
     )
 
-    output_details = getattr(
-        usage,
-        "output_tokens_details",
-        None
+    output_tokens = getattr(
+    usage,
+    "output_tokens",
+    None
     )
 
     if input_details is None or output_details is None:
@@ -2348,8 +2348,8 @@ def get_openai_image_cost(usage, model):
 
     text_tokens = getattr(input_details, "text_tokens", None)
     image_tokens = getattr(input_details, "image_tokens", None)
-    image_output_tokens = getattr(output_details, "image_tokens", None)
-
+    image_output_tokens = output_tokens
+    
     if (
         text_tokens is None
         or image_tokens is None
