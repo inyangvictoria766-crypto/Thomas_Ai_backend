@@ -2485,6 +2485,8 @@ def generate_image(
                 output_format="png",
                 n=1
             )
+            usage = response.usage
+            
 
             provider_generation_succeeded = True
 
