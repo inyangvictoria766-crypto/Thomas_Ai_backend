@@ -72,11 +72,13 @@ PROVIDER_FUNDING_CONFIG = {
     "minimum_reserve_minor": 0,
 
     "providers": {
-        "cloudflare": 1,
-        "openai": 1,
-        "luma": 1,
-        "pixverse": 1
+    "cloudflare": 1,
+    "openai": 1,
+    "luma": 1,
+    "pixverse": 1,
+    "aimlapi": 1
     }
+    
 }
 
 
