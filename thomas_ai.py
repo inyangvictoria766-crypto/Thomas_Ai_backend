@@ -2530,16 +2530,15 @@ def generate_image(
             cloudflare_started = time.perf_counter()
 
             response = requests.post(
-                f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}",
-                headers={
-                    "Authorization": f"Bearer {api_token}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "prompt": prompt,
-                    "steps": 4
-                },
-                timeout=150
+    f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}",
+    headers={
+        "Authorization": f"Bearer {api_token}"
+    },
+    files={
+        "prompt": (None, prompt),
+        "steps": (None, "4")
+    },
+    timeout=150
             )
 
             response.raise_for_status()
