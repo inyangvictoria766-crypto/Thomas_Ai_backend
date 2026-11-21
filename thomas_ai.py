@@ -2209,6 +2209,10 @@ async def paystack_webhook(request: Request):
 class ImageRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=1000)
     quality: str = "low"
+    
+class CharacterReplaceRequest(BaseModel):
+    video_url: str
+    image_url: str
 
 def get_provider_cost(provider, model, feature):
     connection = None
