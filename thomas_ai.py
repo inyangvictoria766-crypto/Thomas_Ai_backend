@@ -245,7 +245,7 @@ def settle_provider_budget(reservation_id, actual_cost):
         .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     )
 
-    if actual_minor < 0:
+    if actual_minor <= 0:
         raise ValueError("Invalid actual provider cost.")
 
     connection = psycopg2.connect(os.getenv("DATABASE_URL"))
