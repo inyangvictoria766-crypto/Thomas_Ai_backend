@@ -1224,6 +1224,8 @@ def record_generation(
                     SET accounting_status = 'recorded'
                     WHERE reservation_id = %s;
                 """, (reservation_id,))
+                
+                connection.commit()
 
                 print(
                     "GENERATION ACCOUNTING RECORDED",
