@@ -998,11 +998,21 @@ def record_generation(
                         "Provider reservation was already released."
                     )
 
+                
                 if reservation_status == "settled":
                     if actual_cost_minor != cost_minor:
                         raise ValueError(
                             "Settled reservation cost does not match."
                         )
+
+                    cursor.execute("""
+                        UPDATE generation_history
+                        SET accounting_status = 'recorded'
+                        WHERE reservation_id = %s;
+                    """, (reservation_id,))
+
+                    connection.commit()
+                    return True
 
                 if cost_minor > estimated_cost_minor:
                     print(
