@@ -974,13 +974,40 @@ def record_generation(
                 """, (cost, reservation_id))
 
                 cursor.execute("""
-                    SELECT provider, actual_cost_minor, status
+                    SELECT provider, estimated_cost_minor, actual_cost_minor, status
                     FROM provider_cost_reservations
                     WHERE reservation_id = %s
                     FOR UPDATE;
                 """, (reservation_id,))
 
-                reservation = cursor.fetchone()
+                
+                if not reservation or reservation[0] != provider:
+                    raise ValueError(
+                        "Matching provider reservation not found."
+                    )
+
+                estimated_cost_minor = reservation[1]
+                actual_cost_minor = reservation[2]
+                reservation_status = reservation[3]
+
+                if reservation_status == "released":
+                    raise ValueError(
+                        "Provider reservation was already released."
+                    )
+
+                if reservation_status == "settled":
+                    if actual_cost_minor != cost_minor:
+                        raise ValueError(
+                            "Settled reservation cost does not match."
+                        )
+
+                if cost_minor > estimated_cost_minor:
+                    print(
+                        "PROVIDER COST OVERRUN:",
+                        f"Estimated: {estimated_cost_minor}",
+                        f"Actual: {cost_minor}",
+                        flush=True
+                    )
 
                 if not reservation or reservation[0] != provider:
                     raise ValueError(
