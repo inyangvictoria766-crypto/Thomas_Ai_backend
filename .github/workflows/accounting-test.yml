@@ -37,4 +37,6 @@ jobs:
         run: python test_refund.py
       - name: Run OpenAI cost tests
         run: python -m unittest -v test_openai_cost
+      - name: Run provider settlement tests
+        run: python -m unittest -v test_provider_settlement
         
