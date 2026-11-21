@@ -2214,6 +2214,7 @@ class ImageRequest(BaseModel):
     quality: str = "low"
     
 class CharacterReplaceRequest(BaseModel):
+    video_public_id: str = Field(min_length=1)
     video_url: str
     image_url: str
     resolution: str = "480p"
@@ -2279,6 +2280,42 @@ def get_character_replacement_status(generation_id):
         )
 
     return response.json()
+    
+def validate_character_video_duration(duration):
+    if duration is None:
+        raise ValueError("Video duration is unavailable.")
+
+    duration = float(duration)
+
+    if not 5 <= duration <= 30:
+        raise HTTPException(
+            status_code=400,
+            detail="Character replacement videos must be 5–30 seconds."
+        )
+
+    return duration
+    
+def get_cloudinary_video(public_id):
+    import os
+    import cloudinary
+    import cloudinary.api
+
+    cloudinary.config(
+        cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+        api_key=os.getenv("CLOUDINARY_API_KEY"),
+        api_secret=os.getenv("CLOUDINARY_API_SECRET")
+    )
+
+    resource = cloudinary.api.resource(
+        public_id,
+        resource_type="video"
+    )
+
+    duration = validate_character_video_duration(
+        resource.get("duration")
+    )
+
+    return resource["secure_url"], duration
 
 
 
@@ -2288,11 +2325,15 @@ def character_replacement(
     request: CharacterReplaceRequest,
     current_user: dict = Depends(get_authenticated_user)
 ):
-    return submit_character_replacement(
-        request.video_url,
-        request.image_url,
-        request.resolution
+    video_url, duration = get_cloudinary_video(
+        request.video_public_id
     )
+
+    return {
+        "video_url": video_url,
+        "duration": duration,
+        "status": "validated"
+    }
 
 
 @app.get("/character-replacement-status/{generation_id}")
