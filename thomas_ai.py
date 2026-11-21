@@ -2585,18 +2585,10 @@ def generate_image(
                     flush=True
                 )
 
-                release_provider_budget(reservation_id)
-
-                refund_credits(
-                    current_user["user_id"],
-                    reservation_id,
-                    quality
-                )
-
                 raise HTTPException(
                     status_code=503,
                     detail="Image pricing is temporarily unavailable."
-                )
+            )
             
 
         # 5. HANDLE MISSING IMAGE
