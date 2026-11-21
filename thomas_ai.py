@@ -2280,6 +2280,28 @@ def get_character_replacement_status(generation_id):
 
     return response.json()
 
+
+
+
+@app.post("/character-replacement")
+def character_replacement(
+    request: CharacterReplaceRequest,
+    current_user: dict = Depends(get_authenticated_user)
+):
+    return submit_character_replacement(
+        request.video_url,
+        request.image_url,
+        request.resolution
+    )
+
+
+@app.get("/character-replacement-status/{generation_id}")
+def character_replacement_status(
+    generation_id: str,
+    current_user: dict = Depends(get_authenticated_user)
+):
+    return get_character_replacement_status(generation_id)
+
 def get_provider_cost(provider, model, feature):
     connection = None
 
