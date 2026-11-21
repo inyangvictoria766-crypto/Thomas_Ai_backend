@@ -23,7 +23,7 @@ def run_tests():
             with connection.cursor() as cursor:
                 cursor.execute("""
                     INSERT INTO app_users (user_id, credits)
-                    VALUES (%s, 10)
+                    VALUES (%s, 8)
                 """, (user_id,))
 
                 cursor.execute("""
