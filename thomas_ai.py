@@ -110,11 +110,12 @@ def reserve_provider_budget(
     from decimal import Decimal, ROUND_HALF_UP
 
     allowed_providers = {
-        "openai",
-        "cloudflare",
-        "higgsfield",
-        "luma",
-        "provider_5"
+    "openai",
+    "cloudflare",
+    "higgsfield",
+    "luma",
+    "provider_5",
+    "aimlapi"
     }
 
     if provider not in allowed_providers:
