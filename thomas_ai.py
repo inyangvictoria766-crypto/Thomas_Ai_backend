@@ -2553,9 +2553,15 @@ def generate_image(
 
             result = response.json()
 
+            
             if not result.get("success"):
+                print(
+                    "CLOUDFLARE ERROR:",
+                      result.get("errors"),
+                      flush=True
+                )
                 raise HTTPException(
-                    status_code=502,
+                     status_code=502,
                     detail="Cloudflare image generation failed."
                 )
 
