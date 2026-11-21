@@ -38,5 +38,7 @@ jobs:
       - name: Run OpenAI cost tests
         run: python -m unittest -v test_openai_cost
       - name: Run provider settlement tests
-        run: python -m unittest -v test_provider_settlement
+        env:
+          NEON_TEST_DATABASE_URL: ${{ secrets.NEON_TEST_DATABASE_URL }}
+        run: python test_provider_settlement.py
         
