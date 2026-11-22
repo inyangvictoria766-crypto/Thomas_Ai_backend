@@ -2774,16 +2774,18 @@ def character_replacement_status(
         cursor.execute("""
             UPDATE character_replacement_jobs
             SET status = %s,
-                result_video_url = COALESCE(%s, result_video_url),
-                updated_at = NOW()
+            result_video_url = COALESCE(%s, result_video_url),
+            provider_usage = COALESCE(%s, provider_usage),
+            updated_at = NOW()
             WHERE generation_id = %s
               AND user_id = %s
-        """, (
+        """,(
             provider_status,
             result_video_url,
+            provider_usage if provider_status == "completed" else None,
             generation_id,
             current_user["user_id"]
-        ))
+           )
 
         if cursor.rowcount != 1:
             raise HTTPException(
