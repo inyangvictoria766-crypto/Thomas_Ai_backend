@@ -2451,7 +2451,7 @@ def character_replacement(
             status_code=502,
             detail="Character replacement submission failed."
         )
-    
+
     connection = psycopg2.connect(
         os.getenv("DATABASE_URL")
     )
@@ -2467,7 +2467,6 @@ def character_replacement(
                 status,
                 video_url,
                 duration_seconds
-                
             )
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (
@@ -2477,13 +2476,39 @@ def character_replacement(
             result.get("status", "submitted"),
             video_url,
             duration
-            
         ))
 
         connection.commit()
 
     except Exception as error:
         connection.rollback()
+
+        try:
+            cursor.execute("""
+                INSERT INTO character_replacement_reconciliation (
+                    reservation_id,
+                    generation_id,
+                    user_id,
+                    reason
+                )
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (reservation_id) DO NOTHING
+            """, (
+                reservation_id,
+                result["id"],
+                current_user["user_id"],
+                "Main job record could not be saved."
+            ))
+            connection.commit()
+
+        except Exception as reconciliation_error:
+            connection.rollback()
+            print(
+                "RECONCILIATION SAVE ERROR:",
+                repr(reconciliation_error),
+                flush=True
+            )
+
         print(
             "CHARACTER JOB SAVE ERROR:",
             repr(error),
@@ -2491,6 +2516,7 @@ def character_replacement(
             result["id"],
             flush=True
         )
+
         raise HTTPException(
             status_code=503,
             detail="Job was submitted but tracking is pending reconciliation."
