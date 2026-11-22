@@ -2669,6 +2669,9 @@ if not budget_reserved:
                 repr(reconciliation_error),
                 flush=True
             )
+            raise RuntimeError(
+               "URGENT: Provider accepted job but reconciliation record failed."
+                ) from reconciliation_error
 
         print(
             "CHARACTER JOB SAVE ERROR:",
