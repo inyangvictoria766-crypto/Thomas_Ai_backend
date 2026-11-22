@@ -265,43 +265,119 @@ def release_provider_budget(reservation_id):
         connection.close()
         
 
-def settle_provider_budget(reservation_id, actual_cost):
+def settle_provider_budget(
+    reservation_id,
+    actual_cost
+):
     from decimal import Decimal, ROUND_HALF_UP
 
+    actual = Decimal(str(actual_cost))
+
+    if not actual.is_finite() or actual <= 0:
+        raise ValueError("Invalid actual provider cost.")
+
     actual_minor = int(
-        (Decimal(str(actual_cost)) * Decimal("100000000"))
-        .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        (actual * Decimal("100000000")).quantize(
+            Decimal("1"),
+            rounding=ROUND_HALF_UP
+        )
     )
 
     if actual_minor <= 0:
-        raise ValueError("Invalid actual provider cost.")
+        raise ValueError("Invalid provider cost precision.")
 
-    connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+    connection = psycopg2.connect(
+        os.getenv("DATABASE_URL")
+    )
 
     try:
         with connection:
             with connection.cursor() as cur:
+
                 cur.execute("""
-                    UPDATE provider_cost_reservations AS r
+                    SELECT provider, estimated_cost_minor, status
+                    FROM provider_cost_reservations
+                    WHERE reservation_id = %s
+                    FOR UPDATE
+                """, (reservation_id,))
+
+                reservation = cur.fetchone()
+
+                if not reservation:
+                    raise ValueError("Provider reservation not found.")
+
+                provider, estimated_minor, status = reservation
+
+                if status == "settled":
+                    return False
+
+                if status != "reserved":
+                    raise ValueError("Reservation is not active.")
+
+                cur.execute("""
+                    INSERT INTO provider_transactions (
+                        provider,
+                        transaction_type,
+                        amount_minor,
+                        currency,
+                        unit_scale,
+                        source_reference,
+                        description
+                    )
+                    VALUES (
+                        %s, 'usage', %s, 'USD',
+                        100000000, %s, %s
+                    )
+                    ON CONFLICT DO NOTHING
+                    RETURNING id
+                """, (
+                    provider,
+                    actual_minor,
+                    str(reservation_id),
+                    "Provider generation usage"
+                ))
+
+                transaction = cur.fetchone()
+
+                if not transaction:
+                    raise ValueError(
+                        "Usage transaction already exists."
+                    )
+
+                cur.execute("""
+                    UPDATE provider_funding
+                    SET spent_amount_minor =
+                        spent_amount_minor + %s,
+                        updated_at = NOW()
+                    WHERE provider = %s
+                      AND currency = 'USD'
+                    RETURNING id
+                """, (actual_minor, provider))
+
+                if not cur.fetchone():
+                    raise ValueError(
+                        "Provider funding record not found."
+                    )
+
+                cur.execute("""
+                    UPDATE provider_cost_reservations
                     SET actual_cost_minor = %s,
                         status = 'settled',
                         updated_at = NOW()
-                    WHERE r.reservation_id = %s
-                      AND r.status = 'reserved'
-                      AND EXISTS (
-                          SELECT 1
-                          FROM provider_transactions AS pt
-                          WHERE pt.provider = r.provider
-                            AND pt.transaction_type = 'usage'
-                            AND pt.source_reference = r.reservation_id::text
-                      )
-                    RETURNING r.id
+                    WHERE reservation_id = %s
+                      AND status = 'reserved'
                 """, (actual_minor, reservation_id))
 
-                return cur.fetchone() is not None
+                if cur.rowcount != 1:
+                    raise ValueError(
+                        "Reservation settlement failed."
+                    )
+
+                return True
 
     finally:
         connection.close()
+        
 def record_provider_transaction(
     provider,
     transaction_type,
