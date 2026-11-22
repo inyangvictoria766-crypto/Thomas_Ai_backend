@@ -2526,12 +2526,12 @@ def get_cloudinary_image(public_id):
 
 
 
+
 @app.post("/character-replacement")
 def character_replacement(
     request: CharacterReplaceRequest,
     current_user: dict = Depends(get_authenticated_user)
 ):
-    
     video_url, duration = get_cloudinary_video(
         request.video_public_id
     )
@@ -2544,70 +2544,79 @@ def character_replacement(
         duration
     )
 
-    
     new_balance, reservation_id = reserve_credits(
-    current_user["user_id"],
-    credits_required,
-    "character_replacement"
-    )
-
-estimated_provider_cost = None
-
-if estimated_provider_cost is None:
-    refund_credits(
         current_user["user_id"],
-        reservation_id,
+        credits_required,
         "character_replacement"
     )
-    raise HTTPException(
-        status_code=503,
-        detail="Character replacement pricing is not configured."
-    )
 
+    # Pricing is not yet verified.
+    estimated_provider_cost = None
 
-try:
-    budget_reserved = reserve_provider_budget(
-        "aimlapi",
-        reservation_id,
-        estimated_provider_cost
-    )
-except Exception as error:
-    print("PROVIDER BUDGET ERROR:", repr(error), flush=True)
+    if estimated_provider_cost is None:
+        refund_credits(
+            current_user["user_id"],
+            reservation_id,
+            "character_replacement"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Character replacement pricing is not configured."
+        )
 
-    refund_credits(
-        current_user["user_id"],
-        reservation_id,
-        "character_replacement"
-    )
-    raise HTTPException(
-        status_code=503,
-        detail="Provider budget reservation failed."
-    )
+    try:
+        budget_reserved = reserve_provider_budget(
+            "aimlapi",
+            reservation_id,
+            estimated_provider_cost
+        )
 
-if not budget_reserved:
-    refund_credits(
-        current_user["user_id"],
-        reservation_id,
-        "character_replacement"
-    )
-    raise HTTPException(
-        status_code=503,
-        detail="Insufficient provider funding."
-    )
-    
+    except Exception as error:
+        print(
+            "PROVIDER BUDGET ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        refund_credits(
+            current_user["user_id"],
+            reservation_id,
+            "character_replacement"
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail="Provider budget reservation failed."
+        )
+
+    if not budget_reserved:
+        refund_credits(
+            current_user["user_id"],
+            reservation_id,
+            "character_replacement"
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail="Insufficient provider funding."
+        )
+
     try:
         result = submit_character_replacement(
             video_url,
             image_url,
             request.resolution
         )
+
     except Exception as error:
         release_provider_budget(reservation_id)
+
         refund_credits(
             current_user["user_id"],
             reservation_id,
             "character_replacement"
         )
+
         raise HTTPException(
             status_code=502,
             detail="Character replacement submission failed."
@@ -2621,24 +2630,24 @@ if not budget_reserved:
         cursor = connection.cursor()
 
         cursor.execute("""
-    INSERT INTO character_replacement_jobs (
-        user_id,
-        reservation_id,
-        generation_id,
-        status,
-        video_url,
-        duration_seconds,
-        provider_cost
-    )
-    VALUES (%s, %s, %s, %s, %s, %s, NULL)
-""", (
-    current_user["user_id"],
-    reservation_id,
-    result["id"],
-    result.get("status", "submitted"),
-    video_url,
-    duration
-))
+            INSERT INTO character_replacement_jobs (
+                user_id,
+                reservation_id,
+                generation_id,
+                status,
+                video_url,
+                duration_seconds,
+                provider_cost
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, NULL)
+        """, (
+            current_user["user_id"],
+            reservation_id,
+            result["id"],
+            result.get("status", "submitted"),
+            video_url,
+            duration
+        ))
 
         connection.commit()
 
@@ -2661,18 +2670,21 @@ if not budget_reserved:
                 current_user["user_id"],
                 "Main job record could not be saved."
             ))
+
             connection.commit()
 
         except Exception as reconciliation_error:
             connection.rollback()
+
             print(
                 "RECONCILIATION SAVE ERROR:",
                 repr(reconciliation_error),
                 flush=True
             )
+
             raise RuntimeError(
-               "URGENT: Provider accepted job but reconciliation record failed."
-                ) from reconciliation_error
+                "URGENT: Provider accepted job but reconciliation record failed."
+            ) from reconciliation_error
 
         print(
             "CHARACTER JOB SAVE ERROR:",
@@ -2689,17 +2701,19 @@ if not budget_reserved:
 
     finally:
         connection.close()
-        
-        return {
-            "video_url": video_url,
-            "image_url": image_url,
-            "duration": duration,
-            "credits_required": credits_required,
-            "reservation_id": str(reservation_id),
-            "remaining_credits": new_balance,
-            "generation_id": result["id"],
-            "status": result.get("status", "submitted")
-         }
+
+    return {
+        "video_url": video_url,
+        "image_url": image_url,
+        "duration": duration,
+        "credits_required": credits_required,
+        "reservation_id": str(reservation_id),
+        "remaining_credits": new_balance,
+        "generation_id": result["id"],
+        "status": result.get("status", "submitted")
+    }
+
+
 
 
 @app.get("/character-replacement-status/{generation_id}")
