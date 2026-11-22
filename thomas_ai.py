@@ -2465,15 +2465,19 @@ def character_replacement(
                 reservation_id,
                 generation_id,
                 status,
-                video_url
+                video_url,
+                duration_seconds
+                
             )
-            VALUES (%s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s)
         """, (
             current_user["user_id"],
             reservation_id,
             result["id"],
             result.get("status", "submitted"),
-            video_url
+            video_url,
+            duration
+            
         ))
 
         connection.commit()
