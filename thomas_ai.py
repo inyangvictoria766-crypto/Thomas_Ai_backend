@@ -2606,23 +2606,24 @@ def character_replacement(
         cursor = connection.cursor()
 
         cursor.execute("""
-            INSERT INTO character_replacement_jobs (
-                user_id,
-                reservation_id,
-                generation_id,
-                status,
-                video_url,
-                duration_seconds
-            )
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (
-            current_user["user_id"],
-            reservation_id,
-            result["id"],
-            result.get("status", "submitted"),
-            video_url,
-            duration
-        ))
+    INSERT INTO character_replacement_jobs (
+        user_id,
+        reservation_id,
+        generation_id,
+        status,
+        video_url,
+        duration_seconds,
+        provider_cost
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, NULL)
+""", (
+    current_user["user_id"],
+    reservation_id,
+    result["id"],
+    result.get("status", "submitted"),
+    video_url,
+    duration
+))
 
         connection.commit()
 
