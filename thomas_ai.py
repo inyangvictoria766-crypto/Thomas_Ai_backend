@@ -2725,7 +2725,15 @@ def character_replacement_status(
     result_video_url = None
 
     if provider_status == "completed":
+        
         result_video_url = data.get("video", {}).get("url")
+        provider_usage = data.get("meta", {}).get("usage", {})
+
+        print(
+            "AIMLAPI PROVIDER USAGE:",
+            provider_usage,
+            flush=True
+        )
 
         if not result_video_url:
             raise HTTPException(
