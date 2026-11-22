@@ -2723,6 +2723,7 @@ def character_replacement_status(
     provider_status = data.get("status")
 
     result_video_url = None
+    provider_usage = None
 
     if provider_status == "completed":
         
