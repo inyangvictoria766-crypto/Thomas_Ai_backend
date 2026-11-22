@@ -2315,7 +2315,11 @@ def get_character_replacement_status(generation_id):
             f"AI/ML API status error: {response.text[:1000]}"
         )
 
-    return response.json()
+    data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError("Invalid AI/ML API status response.")
+
+    return data
     
 def validate_character_video_duration(duration):
     if duration is None:
@@ -2537,8 +2541,59 @@ def character_replacement_status(
     finally:
         connection.close()
 
-    return get_character_replacement_status(generation_id)
-            
+    
+    data = get_character_replacement_status(generation_id)
+
+    provider_status = data.get("status")
+
+    allowed_statuses = {
+        "queued",
+        "generating",
+        "completed",
+        "error"
+    }
+
+    if provider_status not in allowed_statuses:
+        raise HTTPException(
+            status_code=502,
+            detail="Invalid provider job status."
+        )
+
+    connection = psycopg2.connect(
+        os.getenv("DATABASE_URL")
+    )
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            UPDATE character_replacement_jobs
+            SET status = %s,
+                updated_at = NOW()
+            WHERE generation_id = %s
+              AND user_id = %s
+        """, (
+            provider_status,
+            generation_id,
+            current_user["user_id"]
+        ))
+
+        if cursor.rowcount != 1:
+            raise HTTPException(
+                status_code=404,
+                detail="Job not found."
+            )
+
+        connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+    return data
 
 def get_cloudflare_editing_cost(width, height):
     connection = psycopg2.connect(
