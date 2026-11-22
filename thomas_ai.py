@@ -2579,15 +2579,13 @@ def character_replacement_status(
     result_video_url = None
 
     if provider_status == "completed":
-        result_video_url = (
-            data.get("video", {}).get("url")
-        )
-    
-    if not result_video_url:
-        raise HTTPException(
-            status_code=502,
-            detail="Completed job has no video URL."
-        )
+        result_video_url = data.get("video", {}).get("url")
+
+        if not result_video_url:
+            raise HTTPException(
+                status_code=502,
+                detail="Completed job has no video URL."
+            )
 
     allowed_statuses = {
         "queued",
