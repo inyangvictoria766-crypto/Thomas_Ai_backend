@@ -2277,11 +2277,22 @@ def submit_character_replacement(
             f"AI/ML API error: {response.text[:1000]}"
         )
 
-    return response.json()
+    
+    data = response.json()
+
+    generation_id = data.get("id")
+
+    if not generation_id:
+        raise ValueError(
+            "AI/ML API did not return a generation ID."
+        )
+
+    return data
+    
 
 def get_character_replacement_status(generation_id):
-    import osrequests
-    import 
+    import os
+    import requests
 
     api_key = os.getenv("AIMLAPI_API_KEY")
 
@@ -2436,6 +2447,50 @@ def character_replacement(
             status_code=502,
             detail="Character replacement submission failed."
         )
+    
+    connection = psycopg2.connect(
+        os.getenv("DATABASE_URL")
+    )
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            INSERT INTO character_replacement_jobs (
+                user_id,
+                reservation_id,
+                generation_id,
+                status,
+                video_url
+            )
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            current_user["user_id"],
+            reservation_id,
+            result["id"],
+            result.get("status", "submitted"),
+            video_url
+        ))
+
+        connection.commit()
+
+    except Exception as error:
+        connection.rollback()
+        print(
+            "CHARACTER JOB SAVE ERROR:",
+            repr(error),
+            "GENERATION ID:",
+            result["id"],
+            flush=True
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Job was submitted but tracking is pending reconciliation."
+        )
+
+    finally:
+        connection.close()
+        
 
     return {
         "video_url": video_url,
@@ -2444,7 +2499,8 @@ def character_replacement(
         "credits_required": credits_required,
         "reservation_id": str(reservation_id),
         "remaining_credits": new_balance,
-        "status": "credits_reserved"
+        "generation_id": result["id"],
+        "status": result.get("status", "submitted")
     }
 
 
@@ -2453,35 +2509,35 @@ def character_replacement_status(
     generation_id: str,
     current_user: dict = Depends(get_authenticated_user)
 ):
-    return get_character_replacement_status(generation_id)
-
-def get_provider_cost(provider, model, feature):
-    connection = None
+    connection = psycopg2.connect(
+        os.getenv("DATABASE_URL")
+    )
 
     try:
-        connection = psycopg2.connect(
-            os.getenv("DATABASE_URL")
-        )
         cursor = connection.cursor()
 
         cursor.execute("""
-            SELECT cost_per_unit
-            FROM provider_pricing
-            WHERE provider = %s
-              AND model = %s
-              AND feature = %s
-        """, (provider, model, feature))
+            SELECT status
+            FROM character_replacement_jobs
+            WHERE generation_id = %s
+              AND user_id = %s
+        """, (
+            generation_id,
+            current_user["user_id"]
+        ))
 
-        result = cursor.fetchone()
+        job = cursor.fetchone()
 
-        if not result:
-            raise ValueError("Provider pricing not configured.")
-
-        return float(result[0])
+        if not job:
+            raise HTTPException(
+                status_code=404,
+                detail="Character replacement job not found."
+            )
 
     finally:
-        if connection:
-            connection.close()
+        connection.close()
+
+    return get_character_replacement_status(generation_id)
             
 
 def get_cloudflare_editing_cost(width, height):
