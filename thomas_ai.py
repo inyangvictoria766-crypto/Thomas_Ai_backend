@@ -2319,6 +2319,26 @@ def get_cloudinary_video(public_id):
 
 
 
+def get_cloudinary_image(public_id):
+    import os
+    import cloudinary
+    import cloudinary.api
+
+    cloudinary.config(
+        cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+        api_key=os.getenv("CLOUDINARY_API_KEY"),
+        api_secret=os.getenv("CLOUDINARY_API_SECRET")
+    )
+
+    resource = cloudinary.api.resource(
+        public_id,
+        resource_type="image"
+    )
+
+    return resource["secure_url"]
+    
+
+
 
 @app.post("/character-replacement")
 def character_replacement(
@@ -2329,8 +2349,13 @@ def character_replacement(
         request.video_public_id
     )
 
+    image_url = get_cloudinary_image(
+        request.image_public_id
+    )
+
     return {
         "video_url": video_url,
+        "image_url": image_url,
         "duration": duration,
         "status": "validated"
     }
