@@ -2531,6 +2531,7 @@ def character_replacement(
     request: CharacterReplaceRequest,
     current_user: dict = Depends(get_authenticated_user)
 ):
+    
     video_url, duration = get_cloudinary_video(
         request.video_public_id
     )
@@ -2548,7 +2549,7 @@ def character_replacement(
     current_user["user_id"],
     credits_required,
     "character_replacement"
-)
+    )
 
 estimated_provider_cost = None
 
