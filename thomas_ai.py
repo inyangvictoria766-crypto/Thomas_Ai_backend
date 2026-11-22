@@ -2543,42 +2543,56 @@ def character_replacement(
         duration
     )
 
+    
     new_balance, reservation_id = reserve_credits(
+    current_user["user_id"],
+    credits_required,
+    "character_replacement"
+)
+
+estimated_provider_cost = None
+
+if estimated_provider_cost is None:
+    refund_credits(
         current_user["user_id"],
-        credits_required,
+        reservation_id,
         "character_replacement"
     )
-    estimated_provider_cost = (
-        Decimal(str(duration)) * Decimal("0.04")
+    raise HTTPException(
+        status_code=503,
+        detail="Character replacement pricing is not configured."
     )
 
-    try:
-        budget_reserved = reserve_provider_budget(
-            "aimlapi",
-            reservation_id,
-            estimated_provider_cost
-        )
-    except Exception:
-        refund_credits(
-            current_user["user_id"],
-            reservation_id,
-            "character_replacement"
-        )
-        raise HTTPException(
-            status_code=503,
-            detail="Provider budget reservation failed."
-        )
 
-    if not budget_reserved:
-        refund_credits(
-            current_user["user_id"],
-            reservation_id,
-            "character_replacement"
-        )
-        raise HTTPException(
-            status_code=503,
-            detail="Insufficient provider budget."
-        )
+try:
+    budget_reserved = reserve_provider_budget(
+        "aimlapi",
+        reservation_id,
+        estimated_provider_cost
+    )
+except Exception as error:
+    print("PROVIDER BUDGET ERROR:", repr(error), flush=True)
+
+    refund_credits(
+        current_user["user_id"],
+        reservation_id,
+        "character_replacement"
+    )
+    raise HTTPException(
+        status_code=503,
+        detail="Provider budget reservation failed."
+    )
+
+if not budget_reserved:
+    refund_credits(
+        current_user["user_id"],
+        reservation_id,
+        "character_replacement"
+    )
+    raise HTTPException(
+        status_code=503,
+        detail="Insufficient provider funding."
+    )
     
     try:
         result = submit_character_replacement(
