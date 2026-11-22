@@ -2690,17 +2690,16 @@ if not budget_reserved:
     finally:
         connection.close()
         
-
-    return {
-        "video_url": video_url,
-        "image_url": image_url,
-        "duration": duration,
-        "credits_required": credits_required,
-        "reservation_id": str(reservation_id),
-        "remaining_credits": new_balance,
-        "generation_id": result["id"],
-        "status": result.get("status", "submitted")
-    }
+        return {
+            "video_url": video_url,
+            "image_url": image_url,
+            "duration": duration,
+            "credits_required": credits_required,
+            "reservation_id": str(reservation_id),
+            "remaining_credits": new_balance,
+            "generation_id": result["id"],
+            "status": result.get("status", "submitted")
+         }
 
 
 @app.get("/character-replacement-status/{generation_id}")
