@@ -2785,7 +2785,7 @@ def character_replacement_status(
             provider_usage if provider_status == "completed" else None,
             generation_id,
             current_user["user_id"]
-           )
+           ))
 
         if cursor.rowcount != 1:
             raise HTTPException(
