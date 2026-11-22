@@ -80,6 +80,31 @@ PROVIDER_FUNDING_CONFIG = {
     }
     
 }
+def calculate_character_replace_credits(duration_seconds):
+    from decimal import Decimal, ROUND_CEILING
+
+    duration = Decimal(str(duration_seconds))
+
+    if not duration.is_finite() or not Decimal("5") <= duration <= Decimal("30"):
+        raise ValueError("Video duration must be between 5 and 30 seconds.")
+
+    rate = PROVIDER_FUNDING_CONFIG["usd_to_ngn_rate"]
+
+    if rate is None:
+        raise ValueError("USD to NGN exchange rate is not configured.")
+
+    api_cost_ngn = (
+        duration
+        * Decimal("0.04")
+        * Decimal(str(rate))
+    )
+
+    credits = (
+        api_cost_ngn
+        / (Decimal("0.70") * Decimal("30"))
+    )
+
+    return int(credits.to_integral_value(rounding=ROUND_CEILING))
 
 
 class CreditPurchaseRequest(BaseModel):
@@ -2352,11 +2377,15 @@ def character_replacement(
     image_url = get_cloudinary_image(
         request.image_public_id
     )
+    credits_required = calculate_character_replace_credits(
+    duration
+    )
 
     return {
         "video_url": video_url,
         "image_url": image_url,
         "duration": duration,
+        "credits_required": credits_required,
         "status": "validated"
     }
 
