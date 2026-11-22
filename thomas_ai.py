@@ -2377,16 +2377,74 @@ def character_replacement(
     image_url = get_cloudinary_image(
         request.image_public_id
     )
+
     credits_required = calculate_character_replace_credits(
-    duration
+        duration
     )
+
+    new_balance, reservation_id = reserve_credits(
+        current_user["user_id"],
+        credits_required,
+        "character_replacement"
+    )
+    estimated_provider_cost = (
+        Decimal(str(duration)) * Decimal("0.04")
+    )
+
+    try:
+        budget_reserved = reserve_provider_budget(
+            "aimlapi",
+            reservation_id,
+            estimated_provider_cost
+        )
+    except Exception:
+        refund_credits(
+            current_user["user_id"],
+            reservation_id,
+            "character_replacement"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Provider budget reservation failed."
+        )
+
+    if not budget_reserved:
+        refund_credits(
+            current_user["user_id"],
+            reservation_id,
+            "character_replacement"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Insufficient provider budget."
+        )
+    
+    try:
+        result = submit_character_replacement(
+            video_url,
+            image_url,
+            request.resolution
+        )
+    except Exception as error:
+        release_provider_budget(reservation_id)
+        refund_credits(
+            current_user["user_id"],
+            reservation_id,
+            "character_replacement"
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Character replacement submission failed."
+        )
 
     return {
         "video_url": video_url,
         "image_url": image_url,
         "duration": duration,
         "credits_required": credits_required,
-        "status": "validated"
+        "reservation_id": str(reservation_id),
+        "remaining_credits": new_balance,
+        "status": "credits_reserved"
     }
 
 
