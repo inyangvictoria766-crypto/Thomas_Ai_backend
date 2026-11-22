@@ -2546,6 +2546,13 @@ def character_replacement_status(
 
     provider_status = data.get("status")
 
+    result_video_url = None
+
+    if provider_status == "completed":
+        result_video_url = (
+            data.get("video", {}).get("url")
+        )
+
     allowed_statuses = {
         "queued",
         "generating",
