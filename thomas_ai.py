@@ -302,6 +302,76 @@ def settle_provider_budget(reservation_id, actual_cost):
 
     finally:
         connection.close()
+def record_provider_transaction(
+    provider,
+    transaction_type,
+    amount,
+    source_reference,
+    description
+):
+    from decimal import Decimal, ROUND_HALF_UP
+
+    allowed_types = {
+        "usage",
+        "funding",
+        "payment",
+        "adjustment"
+    }
+
+    if transaction_type not in allowed_types:
+        raise ValueError("Invalid provider transaction type.")
+
+    value = Decimal(str(amount))
+
+    if not value.is_finite() or value <= 0:
+        raise ValueError("Invalid transaction amount.")
+
+    amount_minor = int(
+        (value * Decimal("100000000")).quantize(
+            Decimal("1"),
+            rounding=ROUND_HALF_UP
+        )
+    )
+
+    if amount_minor <= 0:
+        raise ValueError("Amount below accounting precision.")
+
+    connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+
+    try:
+        with connection:
+            with connection.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO provider_transactions (
+                        provider,
+                        transaction_type,
+                        amount_minor,
+                        currency,
+                        unit_scale,
+                        source_reference,
+                        description
+                    )
+                    VALUES (%s, %s, %s, 'USD', 100000000, %s, %s)
+                    ON CONFLICT (
+                        provider,
+                        transaction_type,
+                        source_reference
+                    )
+                    WHERE source_reference IS NOT NULL
+                    DO NOTHING
+                    RETURNING id;
+                """, (
+                    provider,
+                    transaction_type,
+                    amount_minor,
+                    source_reference,
+                    description
+                ))
+
+                return cur.fetchone() is not None
+
+    finally:
+        connection.close()
 
         
         
