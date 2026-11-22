@@ -2521,7 +2521,7 @@ def character_replacement_status(
         cursor = connection.cursor()
 
         cursor.execute("""
-            SELECT status
+            SELECT status, reservation_id
             FROM character_replacement_jobs
             WHERE generation_id = %s
               AND user_id = %s
@@ -2565,6 +2565,16 @@ def character_replacement_status(
             status_code=502,
             detail="Invalid provider job status."
         )
+        
+    
+    if provider_status == "error":
+        refund_credits(
+            current_user["user_id"],
+            job[1],
+            "character_replacement"
+        )
+
+        release_provider_budget(job[1])
 
     connection = psycopg2.connect(
         os.getenv("DATABASE_URL")
@@ -2576,11 +2586,13 @@ def character_replacement_status(
         cursor.execute("""
             UPDATE character_replacement_jobs
             SET status = %s,
+                result_video_url = COALESCE(%s, result_video_url),
                 updated_at = NOW()
             WHERE generation_id = %s
               AND user_id = %s
         """, (
             provider_status,
+            result_video_url,
             generation_id,
             current_user["user_id"]
         ))
@@ -2590,7 +2602,7 @@ def character_replacement_status(
                 status_code=404,
                 detail="Job not found."
             )
-
+        
         connection.commit()
 
     except Exception:
