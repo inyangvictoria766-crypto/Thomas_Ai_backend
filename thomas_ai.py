@@ -2267,10 +2267,12 @@ async def paystack_webhook(request: Request):
 
         user_id, expected_amount, credits, status = transaction
         from decimal import Decimal
-        customer_obligation_minor = min(
-            int(credits) * 3000,
-            expected_amount - paystack_fee_minor
+        customer_obligation_minor = expected_amount - (
+        paystack_fee_minor or 0
         )
+
+        provider_reserve_minor = 0
+        business_profit_minor = 0
 
         remaining_minor = (
             expected_amount
