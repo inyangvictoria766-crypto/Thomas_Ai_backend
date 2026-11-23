@@ -45,20 +45,36 @@ CREDIT_COSTS = {
 
 OPENAI_MAX_IMAGE_RESERVATION_USD = Decimal("0.15")
 
+
+
 CREDIT_PACKAGES = {
     "starter": {
-        "amount": 50000,
+        "amount": 60000,
         "credits": 20
     },
-    "standard": {
-        "amount": 100000,
+    "basic": {
+        "amount": 150000,
         "credits": 50
     },
-    "premium": {
-        "amount": 250000,
+    "standard": {
+        "amount": 450000,
         "credits": 150
+    },
+    "growth": {
+        "amount": 1500000,
+        "credits": 500
+    },
+    "pro": {
+        "amount": 3000000,
+        "credits": 1000
+    },
+    "ultimate": {
+        "amount": 6000000,
+        "credits": 2000
     }
 }
+
+
 
 PROVIDER_FUNDING_CONFIG = {
     "enabled": True,
