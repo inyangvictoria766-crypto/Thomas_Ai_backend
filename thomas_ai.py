@@ -1107,13 +1107,7 @@ def record_generation(
                     )
                 ))
 
-                # 1. Validate actual provider cost.
-                if provider_cost_usd is None:
-                    print(
-                        "ACCOUNTING PENDING: Actual provider cost unavailable.",
-                        flush=True
-                    )
-                    return False
+                
 
                 cost = Decimal(str(provider_cost_usd))
 
