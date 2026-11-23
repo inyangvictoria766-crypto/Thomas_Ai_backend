@@ -2559,7 +2559,11 @@ def character_replacement(
     )
 
     # Pricing is not yet verified.
-    estimated_provider_cost = None
+    from decimal import Decimal
+
+    estimated_provider_cost = (
+    Decimal(str(duration)) * Decimal("0.04")
+    )
 
     if estimated_provider_cost is None:
         refund_credits(
