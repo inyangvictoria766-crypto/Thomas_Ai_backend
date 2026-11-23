@@ -1066,6 +1066,37 @@ def record_generation(
 
         with connection:
             with connection.cursor() as cursor:
+                
+                cursor.execute("""
+                    INSERT INTO generation_history (
+                        user_id,
+                        quality,
+                        provider,
+                        status,
+                        reservation_id,
+                        model,
+                        provider_cost_usd,
+                        accounting_status
+                    )
+                    VALUES (
+                        %s, %s, %s, 'success',
+                        %s, %s, %s, 'pending'
+                    )
+                    ON CONFLICT (reservation_id)
+                    WHERE reservation_id IS NOT NULL
+                    DO NOTHING;
+                """, (
+                    user_id,
+                    quality,
+                    provider,
+                    reservation_id,
+                    model,
+                     (
+                        Decimal(str(provider_cost_usd))
+                        if provider_cost_usd is not None
+                        else None
+                    )
+                ))
 
                 # 1. Validate actual provider cost.
                 if provider_cost_usd is None:
