@@ -1046,6 +1046,7 @@ def refund_credits(user_id, reservation_id, quality):
 
 
 
+
 def record_generation(
     user_id,
     quality,
@@ -1066,55 +1067,32 @@ def record_generation(
         with connection:
             with connection.cursor() as cursor:
 
-                cost = None
-                cost_minor = None
-
-                if provider_cost_usd is not None:
-                    cost = Decimal(str(provider_cost_usd))
-
-                    if not cost.is_finite() or cost < 0:
-                        raise ValueError("Invalid provider cost.")
-
-                    if cost > 0:
-                        cost_minor = int(
-                            (cost * Decimal("100000000")).quantize(
-                                Decimal("1"),
-                                rounding=ROUND_HALF_UP
-                            )
-                        )
-
-                        if cost_minor <= 0:
-                            raise ValueError(
-                                "Provider cost is below accounting precision."
-                            )
-
-                cursor.execute("""
-                    INSERT INTO generation_history (
-                        user_id,
-                        quality,
-                        provider,
-                        status,
-                        reservation_id,
-                        model,
-                        provider_cost_usd,
-                        accounting_status
+                # 1. Validate actual provider cost.
+                if provider_cost_usd is None:
+                    print(
+                        "ACCOUNTING PENDING: Actual provider cost unavailable.",
+                        flush=True
                     )
-                    VALUES (
-                        %s, %s, %s, 'success',
-                        %s, %s, %s, 'pending'
-                    )
-                    ON CONFLICT (reservation_id)
-                    WHERE reservation_id IS NOT NULL
-                    DO NOTHING;
-                """, (
-                    user_id,
-                    quality,
-                    provider,
-                    reservation_id,
-                    model,
-                    cost,
-                ))
+                    return False
 
+                cost = Decimal(str(provider_cost_usd))
+
+                if not cost.is_finite() or cost <= 0:
+                    raise ValueError("Invalid provider cost.")
+
+                cost_minor = int(
+                    (cost * Decimal("100000000")).quantize(
+                        Decimal("1"),
+                        rounding=ROUND_HALF_UP
+                    )
+                )
+
+                if cost_minor <= 0:
+                    raise ValueError(
+                        "Provider cost is below accounting precision."
+                    )
+
+                # 2. Verify generation history.
                 cursor.execute("""
                     SELECT
                         user_id,
@@ -1138,42 +1116,31 @@ def record_generation(
                     or history[2] != model
                 ):
                     raise ValueError(
-                        "Existing generation record does not match."
+                        "Generation history does not match."
                     )
-
-                if cost is None or cost == 0:
-                    print(
-                        "ACCOUNTING PENDING: Actual provider cost unavailable.",
-                        flush=True
-                    )
-                    return False
 
                 if (
                     history[3] is not None
                     and Decimal(str(history[3])) != cost
                 ):
                     raise ValueError(
-                        "Generation cost does not match existing history."
+                        "Generation cost does not match history."
                     )
 
+                # 3. Lock provider reservation.
                 cursor.execute("""
-                    UPDATE generation_history
-                    SET provider_cost_usd = %s
-                    WHERE reservation_id = %s
-                      AND provider_cost_usd IS NULL;
-                """, (cost, reservation_id))
-
-                cursor.execute("""
-                    SELECT provider, estimated_cost_minor, actual_cost_minor, status
+                    SELECT
+                        provider,
+                        estimated_cost_minor,
+                        actual_cost_minor,
+                        status
                     FROM provider_cost_reservations
                     WHERE reservation_id = %s
                     FOR UPDATE;
                 """, (reservation_id,))
-                
-                reservation = cursor.fetchone()
-                
 
-                
+                reservation = cursor.fetchone()
+
                 if not reservation or reservation[0] != provider:
                     raise ValueError(
                         "Matching provider reservation not found."
@@ -1188,22 +1155,50 @@ def record_generation(
                         "Provider reservation was already released."
                     )
 
-                
+                # 4. Handle an already-settled reservation.
                 if reservation_status == "settled":
+
                     if actual_cost_minor != cost_minor:
                         raise ValueError(
                             "Settled reservation cost does not match."
                         )
 
                     cursor.execute("""
-                        UPDATE generation_history
-                        SET accounting_status = 'recorded'
-                        WHERE reservation_id = %s;
-                    """, (reservation_id,))
+                        SELECT amount_minor, currency, direction
+                        FROM business_ledger
+                        WHERE source = 'provider'
+                          AND source_reference = %s
+                          AND entry_type = 'provider_usage';
+                    """, (str(reservation_id),))
 
-                    connection.commit()
+                    existing = cursor.fetchone()
+
+                    if (
+                        not existing
+                        or existing[0] != cost_minor
+                        or existing[1].strip() != "USD"
+                        or existing[2] != "expense"
+                    ):
+                        raise ValueError(
+                            "Settled provider ledger entry does not match."
+                        )
+
+                    cursor.execute("""
+                        UPDATE generation_history
+                        SET
+                            provider_cost_usd = %s,
+                            accounting_status = 'recorded'
+                        WHERE reservation_id = %s;
+                    """, (cost, reservation_id))
+
+                    print(
+                        "GENERATION ACCOUNTING ALREADY RECORDED",
+                        flush=True
+                    )
+
                     return True
 
+                # 5. Warn about cost overruns.
                 if cost_minor > estimated_cost_minor:
                     print(
                         "PROVIDER COST OVERRUN:",
@@ -1212,128 +1207,8 @@ def record_generation(
                         flush=True
                     )
 
-                if not reservation or reservation[0] != provider:
-                    raise ValueError(
-                        "Matching provider reservation not found."
-                    )
-
-                if reservation[2] == "released":
-                    raise ValueError(
-                        "Provider reservation was already released."
-                    )
-
-                if reservation[2] == "settled":
-                    if reservation[1] != cost_minor:
-                        raise ValueError(
-                            "Settled reservation cost does not match."
-                        )
-
-                    cursor.execute("""
-                        UPDATE generation_history
-                        SET accounting_status = 'recorded'
-                        WHERE reservation_id = %s;
-                    """, (reservation_id,))
-
-                    return True
-
+                # 6. Insert provider usage ledger entry.
                 description = f"{provider} usage: {model}"
-
-                cursor.execute("""
-                    INSERT INTO provider_accounts (
-                        provider,
-                        currency,
-                        balance_minor,
-                        unit_scale
-                    )
-                    VALUES (%s, 'USD', 0, 100000000)
-                    ON CONFLICT (provider)
-                    DO NOTHING;
-                """, (provider,))
-
-                cursor.execute("""
-                    INSERT INTO provider_transactions (
-                        provider,
-                        transaction_type,
-                        amount_minor,
-                        currency,
-                        unit_scale,
-                        source_reference,
-                        description
-                    )
-                    VALUES (
-                        %s, 'usage', %s, 'USD',
-                        100000000, %s, %s
-                    )
-                    ON CONFLICT (
-                        provider,
-                        transaction_type,
-                        source_reference
-                    )
-                    WHERE source_reference IS NOT NULL
-                    DO NOTHING
-                    RETURNING id;
-                """, (
-                    provider,
-                    cost_minor,
-                    str(reservation_id),
-                    description
-                ))
-
-                usage_inserted = cursor.fetchone() is not None
-
-                if not usage_inserted:
-                    cursor.execute("""
-                        SELECT amount_minor, currency
-                        FROM provider_transactions
-                        WHERE provider = %s
-                          AND transaction_type = 'usage'
-                          AND source_reference = %s;
-                    """, (provider, str(reservation_id)))
-
-                    existing_usage = cursor.fetchone()
-
-                    if (
-                        not existing_usage
-                        or existing_usage[0] != cost_minor
-                        or existing_usage[1] != "USD"
-                    ):
-                        raise ValueError(
-                            "Existing provider usage does not match."
-                        )
-
-                if usage_inserted:
-                    cursor.execute("""
-                        UPDATE provider_accounts
-                        SET
-                            balance_minor = balance_minor - %s,
-                            updated_at = NOW()
-                        WHERE provider = %s
-                          AND currency = 'USD';
-                    """, (cost_minor, provider))
-
-                    if cursor.rowcount != 1:
-                        raise ValueError(
-                            "Provider account balance was not updated."
-                        )
-
-                    cursor.execute("""
-                        INSERT INTO provider_funding (
-                            provider,
-                            currency,
-                            funded_amount_minor,
-                            spent_amount_minor,
-                            low_balance_threshold_minor
-                        )
-                        VALUES (
-                            %s, 'USD', 0, %s, 100000000
-                        )
-                        ON CONFLICT (provider, currency)
-                        DO UPDATE SET
-                            spent_amount_minor =
-                                provider_funding.spent_amount_minor
-                                + EXCLUDED.spent_amount_minor,
-                            updated_at = NOW();
-                    """, (provider, cost_minor))
 
                 cursor.execute("""
                     INSERT INTO business_ledger (
@@ -1368,7 +1243,7 @@ def record_generation(
                         entry_type
                     )
                     DO NOTHING
-                    RETURNING amount_minor, currency, direction;
+                    RETURNING amount_minor;
                 """, (
                     cost_minor,
                     str(reservation_id),
@@ -1378,9 +1253,11 @@ def record_generation(
                     str(user_id)
                 ))
 
-                ledger_entry = cursor.fetchone()
+                new_ledger_entry = cursor.fetchone()
 
-                if ledger_entry is None:
+                # 7. Verify existing entry if this is a retry.
+                if new_ledger_entry is None:
+
                     cursor.execute("""
                         SELECT amount_minor, currency, direction
                         FROM business_ledger
@@ -1389,18 +1266,40 @@ def record_generation(
                           AND entry_type = 'provider_usage';
                     """, (str(reservation_id),))
 
-                    ledger_entry = cursor.fetchone()
+                    existing = cursor.fetchone()
 
-                if (
-                    not ledger_entry
-                    or ledger_entry[0] != cost_minor
-                    or ledger_entry[1].strip() != "USD"
-                    or ledger_entry[2] != "expense"
-                ):
-                    raise ValueError(
-                        "Business ledger entry does not match provider cost."
-                    )
+                    if (
+                        not existing
+                        or existing[0] != cost_minor
+                        or existing[1].strip() != "USD"
+                        or existing[2] != "expense"
+                    ):
+                        raise ValueError(
+                            "Existing provider ledger entry does not match."
+                        )
 
+                else:
+                    # 8. Increase spending only for a NEW ledger entry.
+                    cursor.execute("""
+                        INSERT INTO provider_funding (
+                            provider,
+                            currency,
+                            funded_amount_minor,
+                            spent_amount_minor,
+                            low_balance_threshold_minor
+                        )
+                        VALUES (
+                            %s, 'USD', 0, %s, 100000000
+                        )
+                        ON CONFLICT (provider, currency)
+                        DO UPDATE SET
+                            spent_amount_minor =
+                                provider_funding.spent_amount_minor
+                                + EXCLUDED.spent_amount_minor,
+                            updated_at = NOW();
+                    """, (provider, cost_minor))
+
+                # 9. Settle the reservation.
                 cursor.execute("""
                     UPDATE provider_cost_reservations
                     SET
@@ -1422,13 +1321,14 @@ def record_generation(
                         "Provider reservation could not be settled."
                     )
 
+                # 10. Mark generation accounting as recorded.
                 cursor.execute("""
                     UPDATE generation_history
-                    SET accounting_status = 'recorded'
+                    SET
+                        provider_cost_usd = %s,
+                        accounting_status = 'recorded'
                     WHERE reservation_id = %s;
-                """, (reservation_id,))
-                
-                connection.commit()
+                """, (cost, reservation_id))
 
                 print(
                     "GENERATION ACCOUNTING RECORDED",
@@ -1449,16 +1349,6 @@ def record_generation(
         if connection is not None:
             connection.close()
 
-                        
-                        
-
-
-                            
-
-        
-     
-
-        
 
 
 
