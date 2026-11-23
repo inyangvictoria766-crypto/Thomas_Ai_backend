@@ -2267,12 +2267,21 @@ async def paystack_webhook(request: Request):
 
         user_id, expected_amount, credits, status = transaction
         from decimal import Decimal
-        CREDIT_SELLING_PRICE = Decimal("30")
-        customer_obligation_minor = int(
-               Decimal(str(credits)) *
-               CREDIT_SELLING_PRICE *
-               Decimal("100")
-)
+        customer_obligation_minor = min(
+            int(credits) * 3000,
+            expected_amount - paystack_fee_minor
+        )
+
+        remaining_minor = (
+            expected_amount
+            - paystack_fee_minor
+            - customer_obligation_minor
+        )
+
+        provider_reserve_minor = 0
+        business_profit_minor = 0
+     
+
 
         if (
             amount != expected_amount
@@ -2338,6 +2347,8 @@ async def paystack_webhook(request: Request):
     str(user_id),
     credits
 ))
+        
+        
         if paystack_fee_minor is not None and paystack_fee_minor > 0:
             cursor.execute("""
                 INSERT INTO business_ledger (
@@ -2360,9 +2371,7 @@ async def paystack_webhook(request: Request):
                     'paystack',
                     %s,
                     'Paystack transaction fee',
-                    jsonb_build_object(
-                        'user_id', %s
-                    )
+                    jsonb_build_object('user_id', %s)
                 )
                 ON CONFLICT (
                     source,
@@ -2375,7 +2384,51 @@ async def paystack_webhook(request: Request):
                 reference,
                 str(user_id)
             ))
+
+        cursor.execute("""
+            INSERT INTO payment_allocations (
+                payment_reference,
+                payment_amount_minor,
+                payment_fee_minor,
+                customer_obligation_minor,
+                provider_reserve_minor,
+                business_profit_minor,
+                currency
+            )
+            VALUES (%s, %s, %s, %s, 0, 0, 'NGN')
+            ON CONFLICT (payment_reference) DO NOTHING
+            RETURNING id;
+        """, (
+            reference,
+            expected_amount,
+            paystack_fee_minor or 0,
+            customer_obligation_minor
+        ))
+
+        allocation = cursor.fetchone()
+
+        if not allocation:
+            raise HTTPException(
+                status_code=409,
+                detail="Payment allocation already exists."
+            )
+
+        cursor.execute("""
+            UPDATE business_accounts
+            SET balance_minor = balance_minor + %s,
+                updated_at = NOW()
+            WHERE account_name = 'customer_obligations'
+              AND currency = 'NGN';
+        """, (customer_obligation_minor,))
+
+        if cursor.rowcount != 1:
+            raise HTTPException(
+                status_code=500,
+                detail="Customer obligation account missing."
+            )
+
         connection.commit()
+        
         
 
         return {
