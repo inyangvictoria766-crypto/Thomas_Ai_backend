@@ -1066,6 +1066,15 @@ def record_generation(
 
         with connection:
             with connection.cursor() as cursor:
+                # Validate actual provider cost first.
+                if provider_cost_usd is None:
+                    print("ACCOUNTING PENDING: Actual provider cost unavailable.", flush=True)
+                   return False
+
+                cost = Decimal(str(provider_cost_usd))
+
+                if not cost.is_finite() or cost <= 0:
+                    raise ValueError("Invalid actual provider cost.")
                 
                 cursor.execute("""
                     INSERT INTO generation_history (
