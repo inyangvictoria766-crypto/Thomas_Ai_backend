@@ -2266,6 +2266,13 @@ async def paystack_webhook(request: Request):
             )
 
         user_id, expected_amount, credits, status = transaction
+        from decimal import Decimal
+        CREDIT_SELLING_PRICE = Decimal("30")
+        customer_obligation_minor = int(
+               Decimal(str(credits)) *
+               CREDIT_SELLING_PRICE *
+               Decimal("100")
+)
 
         if (
             amount != expected_amount
