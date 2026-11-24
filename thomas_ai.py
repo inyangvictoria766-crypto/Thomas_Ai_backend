@@ -3256,6 +3256,11 @@ def generate_image(
 
         # 5. HANDLE MISSING IMAGE
         if not image_data:
+            refund_credits(
+                current_user["user_id"],
+                reservation_id,
+                quality
+             )
 
             print(
                 "PROVIDER SUCCEEDED BUT RETURNED NO IMAGE DATA.",
@@ -3279,23 +3284,14 @@ def generate_image(
 
             # Customer receives a refund because no image was delivered.
             # Provider cost reservation is NOT released.
-            refund_credits(
-                current_user["user_id"],
-                reservation_id,
-                quality
-            )
+        
 
             raise HTTPException(
                 status_code=502,
                 detail="The provider returned no image."
             )
         
-        if not accounting_recorded:
-            print(
-              "CRITICAL: PROVIDER ACCOUNTING FAILED. "
-              "Reservation requires reconciliation.",
-               flush=True
-         )
+        
 
     except HTTPException:
         if not provider_generation_succeeded:
