@@ -190,6 +190,29 @@ def run_tests():
 
     print("ALL PROVIDER SETTLEMENT TESTS PASSED!")
 
+    # 7. New provider budget reservation.
+    new_reservation_id = str(uuid.uuid4())
+
+    assert thomas_ai.reserve_provider_budget(
+        provider,
+        new_reservation_id,
+        Decimal("0.001")
+    ) is True
+
+    # 8. Duplicate reservation is idempotent.
+    assert thomas_ai.reserve_provider_budget(
+        provider,
+        new_reservation_id,
+        Decimal("0.001")
+    ) is True
+
+    # 9. Insufficient funding is rejected.
+    assert thomas_ai.reserve_provider_budget(
+        provider,
+        str(uuid.uuid4()),
+        Decimal("100")
+    ) is False
+
 
 if __name__ == "__main__":
     run_tests()
