@@ -30,6 +30,7 @@ def run_tests():
     provider = "settle_" + uuid.uuid4().hex[:12]
     reservation_id = str(uuid.uuid4())
     missing_usage_id = str(uuid.uuid4())
+    release_id = str(uuid.uuid4())
 
     cost = Decimal("0.00123456")
     cost_minor = to_minor(cost)
@@ -89,6 +90,15 @@ def run_tests():
                     )
                     VALUES (%s, %s, %s, 'reserved')
                 """, (missing_usage_id, provider, 200000))
+                cursor.execute("""
+                    INSERT INTO provider_cost_reservations (
+                        reservation_id,
+                        provider,
+                        estimated_cost_minor,
+                        status
+                    )
+                    VALUES (%s, %s, %s, 'reserved')
+                """, (release_id, provider, 200000))
 
     finally:
         connection.close()
@@ -119,8 +129,14 @@ def run_tests():
         raise AssertionError("Negative cost was accepted.")
     except ValueError:
         pass
+    
+    # 5. Release reservation.
+    assert thomas_ai.release_provider_budget(release_id) is True
 
-    # 5. Verify final database state.
+    # 6. Cannot release it twice.
+    assert thomas_ai.release_provider_budget(release_id) is False
+
+    # 7. Verify final database state.
     verify = psycopg2.connect(DATABASE_URL)
 
     try:
