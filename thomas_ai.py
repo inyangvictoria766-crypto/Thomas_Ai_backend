@@ -2220,12 +2220,6 @@ async def paystack_webhook(request: Request):
         provider_reserve_minor = 0
         business_profit_minor = 0
 
-        remaining_minor = (
-            expected_amount
-            - paystack_fee_minor
-            - customer_obligation_minor
-        )
-
         provider_reserve_minor = 0
         business_profit_minor = 0
      
