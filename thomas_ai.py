@@ -25,6 +25,7 @@ from pwdlib import PasswordHash
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from pydantic import EmailStr
+from pydantic import BaseModel, EmailStr
 from pydantic import BaseModel
 password_hash = PasswordHash.recommended()
 
@@ -125,7 +126,7 @@ def calculate_character_replace_credits(duration_seconds):
 
 class CreditPurchaseRequest(BaseModel):
     package: str
-    email: str
+    email: EmailStr
 class EmailRegisterRequest(BaseModel):
     name: str
     email: str
