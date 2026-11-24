@@ -17,12 +17,13 @@ os.environ["DATABASE_URL"] = DATABASE_URL
 
 def to_minor(cost):
     return int(
-        (Decimal(str(cost)) * Decimal("100000000")).quantize(
+        (
+            Decimal(str(cost)) * Decimal("100000000")
+        ).quantize(
             Decimal("1"),
             rounding=ROUND_HALF_UP
         )
     )
-
 
 
 def run_tests():
@@ -39,6 +40,7 @@ def run_tests():
         with connection:
             with connection.cursor() as cursor:
 
+                # Create provider funding.
                 cursor.execute("""
                     INSERT INTO provider_funding (
                         provider,
@@ -50,6 +52,7 @@ def run_tests():
                     VALUES (%s, 'USD', 1000000, 0, 100000)
                 """, (provider,))
 
+                # Create reservation with usage transaction.
                 cursor.execute("""
                     INSERT INTO provider_cost_reservations (
                         reservation_id,
@@ -76,6 +79,7 @@ def run_tests():
                     )
                 """, (provider, cost_minor, reservation_id))
 
+                # Create reservation without usage transaction.
                 cursor.execute("""
                     INSERT INTO provider_cost_reservations (
                         reservation_id,
@@ -90,19 +94,22 @@ def run_tests():
         connection.close()
 
     # 1. Successful settlement.
-    assert thomas_ai.settle_provider_budget(
+    result = thomas_ai.settle_provider_budget(
         reservation_id, cost
-    ) is True
+    )
+    assert result is True, "First settlement failed."
 
     # 2. Duplicate settlement must return False.
-    assert thomas_ai.settle_provider_budget(
+    result = thomas_ai.settle_provider_budget(
         reservation_id, cost
-    ) is False
+    )
+    assert result is False, "Duplicate settlement was accepted."
 
     # 3. Missing usage transaction must return False.
-    assert thomas_ai.settle_provider_budget(
+    result = thomas_ai.settle_provider_budget(
         missing_usage_id, cost
-    ) is False
+    )
+    assert result is False, "Missing usage transaction was accepted."
 
     # 4. Negative cost must be rejected.
     try:
@@ -125,7 +132,10 @@ def run_tests():
                 WHERE reservation_id = %s
             """, (reservation_id,))
 
-            assert cursor.fetchone() == ("settled", cost_minor)
+            assert cursor.fetchone() == (
+                "settled",
+                cost_minor
+            )
 
             cursor.execute("""
                 SELECT status, actual_cost_minor
@@ -133,58 +143,31 @@ def run_tests():
                 WHERE reservation_id = %s
             """, (missing_usage_id,))
 
-            assert cursor.fetchone() == ("reserved", None)
-
-    finally:
-        verify.close()
-
-    print("ALL PROVIDER SETTLEMENT TESTS PASSED!")
-                
-    # 1. Successful settlement.
-    assert thomas_ai.settle_provider_budget(
-        reservation_id, cost
-    ) is True
-
-    # 2. Duplicate settlement must be rejected.
-    assert thomas_ai.settle_provider_budget(
-        reservation_id, cost
-    ) is False
-
-    # 3. Missing usage transaction must be rejected.
-    assert thomas_ai.settle_provider_budget(
-        missing_usage_id, cost
-    ) is False
-
-    # 4. Negative cost must be rejected.
-    try:
-        thomas_ai.settle_provider_budget(
-            reservation_id, Decimal("-0.01")
-        )
-        raise AssertionError("Negative cost was accepted.")
-    except ValueError:
-        pass
-
-    # 5. Verify final database state.
-    verify = psycopg2.connect(DATABASE_URL)
-
-    try:
-        with verify.cursor() as cursor:
+            assert cursor.fetchone() == (
+                "reserved",
+                None
+            )
 
             cursor.execute("""
-                SELECT status, actual_cost_minor
-                FROM provider_cost_reservations
-                WHERE reservation_id = %s
-            """, (reservation_id,))
+                SELECT spent_amount_minor
+                FROM provider_funding
+                WHERE provider = %s
+                  AND currency = 'USD'
+            """, (provider,))
 
-            assert cursor.fetchone() == ("settled", cost_minor)
+            funding = cursor.fetchone()
+            assert funding is not None
+            assert funding[0] == cost_minor
 
             cursor.execute("""
-                SELECT status, actual_cost_minor
-                FROM provider_cost_reservations
-                WHERE reservation_id = %s
-            """, (missing_usage_id,))
+                SELECT COUNT(*)
+                FROM provider_transactions
+                WHERE provider = %s
+                  AND transaction_type = 'usage'
+                  AND source_reference = %s
+            """, (provider, reservation_id))
 
-            assert cursor.fetchone() == ("reserved", None)
+            assert cursor.fetchone()[0] == 1
 
     finally:
         verify.close()
@@ -194,4 +177,4 @@ def run_tests():
 
 if __name__ == "__main__":
     run_tests()
-  
+    
