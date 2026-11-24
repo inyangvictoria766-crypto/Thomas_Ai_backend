@@ -260,25 +260,44 @@ def reserve_provider_budget(
     finally:
         connection.close()
 
+
 def release_provider_budget(reservation_id):
-    connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+    connection = psycopg2.connect(
+        os.getenv("DATABASE_URL")
+    )
 
     try:
         with connection:
             with connection.cursor() as cur:
+
+                cur.execute("""
+                    SELECT status
+                    FROM provider_cost_reservations
+                    WHERE reservation_id = %s
+                    FOR UPDATE
+                """, (reservation_id,))
+
+                reservation = cur.fetchone()
+
+                if not reservation:
+                    return False
+
+                if reservation[0] != "reserved":
+                    return False
+
                 cur.execute("""
                     UPDATE provider_cost_reservations
                     SET status = 'released',
                         updated_at = NOW()
                     WHERE reservation_id = %s
                       AND status = 'reserved'
-                    RETURNING id
                 """, (reservation_id,))
 
-                return cur.fetchone() is not None
+                return cur.rowcount == 1
 
     finally:
         connection.close()
+        
         
 
 
