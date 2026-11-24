@@ -189,29 +189,62 @@ def run_tests():
         verify.close()
 
     print("ALL PROVIDER SETTLEMENT TESTS PASSED!")
+    
+    # 7. Prepare funding for reservation test.
+    test_provider = "aimlapi"
+    funding_amount = 100000000
 
-    # 7. New provider budget reservation.
+    setup = psycopg2.connect(DATABASE_URL)
+
+    try:
+        with setup:
+            with setup.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO provider_funding (
+                        provider,
+                        currency,
+                        funded_amount_minor,
+                        spent_amount_minor,
+                        low_balance_threshold_minor
+                    )
+                    VALUES (%s, 'USD', %s, 0, 100000)
+                    ON CONFLICT (provider, currency)
+                    DO UPDATE SET
+                        funded_amount_minor =
+                            provider_funding.funded_amount_minor
+                            + EXCLUDED.funded_amount_minor
+                """, (test_provider, funding_amount))
+    finally:
+        setup.close()
+
     new_reservation_id = str(uuid.uuid4())
 
+    # 8. Reservation succeeds.
     assert thomas_ai.reserve_provider_budget(
-        provider,
+        test_provider,
         new_reservation_id,
         Decimal("0.001")
     ) is True
 
-    # 8. Duplicate reservation is idempotent.
+    # 9. Duplicate reservation is safe.
     assert thomas_ai.reserve_provider_budget(
-        provider,
+        test_provider,
         new_reservation_id,
         Decimal("0.001")
     ) is True
 
-    # 9. Insufficient funding is rejected.
+    # 10. Insufficient funding is rejected.
     assert thomas_ai.reserve_provider_budget(
-        provider,
+        test_provider,
         str(uuid.uuid4()),
         Decimal("100")
     ) is False
+
+    # Release test reservation.
+    assert thomas_ai.release_provider_budget(
+        new_reservation_id
+    ) is True
+
 
 
 if __name__ == "__main__":
