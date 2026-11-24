@@ -145,6 +145,7 @@ from fastapi import Header
 security = HTTPBearer()
 
 
+
 def reserve_provider_budget(
     provider,
     reservation_id,
@@ -153,16 +154,19 @@ def reserve_provider_budget(
     from decimal import Decimal, ROUND_HALF_UP
 
     allowed_providers = {
-    "openai",
-    "cloudflare",
-    "higgsfield",
-    "luma",
-    "provider_5",
-    "aimlapi"
+        "openai",
+        "cloudflare",
+        "higgsfield",
+        "luma",
+        "provider_5",
+        "aimlapi"
     }
 
     if provider not in allowed_providers:
         raise ValueError("Unsupported provider.")
+
+    if not reservation_id:
+        raise ValueError("Reservation ID is required.")
 
     estimated = Decimal(str(estimated_cost))
 
@@ -179,7 +183,9 @@ def reserve_provider_budget(
     if estimated_minor <= 0:
         raise ValueError("Provider estimate is below accounting precision.")
 
-    connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+    connection = psycopg2.connect(
+        os.getenv("DATABASE_URL")
+    )
 
     try:
         with connection:
@@ -191,7 +197,7 @@ def reserve_provider_budget(
                         currency
                     )
                     VALUES (%s, 'USD')
-                    ON CONFLICT (provider, currency) DO NOTHING;
+                    ON CONFLICT (provider, currency) DO NOTHING
                 """, (provider,))
 
                 cur.execute("""
@@ -199,7 +205,7 @@ def reserve_provider_budget(
                     FROM provider_funding
                     WHERE provider = %s
                       AND currency = 'USD'
-                    FOR UPDATE;
+                    FOR UPDATE
                 """, (provider,))
 
                 funding = cur.fetchone()
@@ -213,7 +219,7 @@ def reserve_provider_budget(
                     SELECT provider, estimated_cost_minor, status
                     FROM provider_cost_reservations
                     WHERE reservation_id = %s
-                    FOR UPDATE;
+                    FOR UPDATE
                 """, (reservation_id,))
 
                 existing = cur.fetchone()
@@ -233,7 +239,7 @@ def reserve_provider_budget(
                     )
                     FROM provider_cost_reservations
                     WHERE provider = %s
-                      AND status = 'reserved';
+                      AND status = 'reserved'
                 """, (provider,))
 
                 pending = cur.fetchone()[0]
@@ -248,7 +254,7 @@ def reserve_provider_budget(
                         provider,
                         estimated_cost_minor
                     )
-                    VALUES (%s, %s, %s);
+                    VALUES (%s, %s, %s)
                 """, (
                     reservation_id,
                     provider,
@@ -259,6 +265,8 @@ def reserve_provider_budget(
 
     finally:
         connection.close()
+        
+
 
 
 def release_provider_budget(reservation_id):
