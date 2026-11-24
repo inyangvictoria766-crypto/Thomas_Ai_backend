@@ -281,6 +281,7 @@ def release_provider_budget(reservation_id):
         connection.close()
         
 
+
 def settle_provider_budget(
     reservation_id,
     actual_cost
@@ -331,33 +332,26 @@ def settle_provider_budget(
                     raise ValueError("Reservation is not active.")
 
                 cur.execute("""
-                    INSERT INTO provider_transactions (
-                        provider,
-                        transaction_type,
-                        amount_minor,
-                        currency,
-                        unit_scale,
-                        source_reference,
-                        description
-                    )
-                    VALUES (
-                        %s, 'usage', %s, 'USD',
-                        100000000, %s, %s
-                    )
-                    ON CONFLICT DO NOTHING
-                    RETURNING id
-                """, (
-                    provider,
-                    actual_minor,
-                    str(reservation_id),
-                    "Provider generation usage"
-                ))
+                    SELECT amount_minor, currency, unit_scale
+                    FROM provider_transactions
+                    WHERE provider = %s
+                      AND transaction_type = 'usage'
+                      AND source_reference = %s
+                    FOR UPDATE
+                """, (provider, str(reservation_id)))
 
                 transaction = cur.fetchone()
 
                 if not transaction:
+                    return False
+
+                if (
+                    transaction[0] != actual_minor
+                    or transaction[1] != "USD"
+                    or transaction[2] != 100000000
+                ):
                     raise ValueError(
-                        "Usage transaction already exists."
+                        "Existing usage transaction does not match."
                     )
 
                 cur.execute("""
@@ -393,6 +387,7 @@ def settle_provider_budget(
 
     finally:
         connection.close()
+                                  
         
 def record_provider_transaction(
     provider,
