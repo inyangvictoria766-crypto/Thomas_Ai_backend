@@ -143,7 +143,7 @@ class GoogleLoginRequest(BaseModel):
     
 from fastapi import Header
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=True)
 
 
 
