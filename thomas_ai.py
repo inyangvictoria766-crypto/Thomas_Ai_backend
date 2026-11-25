@@ -2685,6 +2685,21 @@ def character_replacement(
     image_url = get_cloudinary_image(
         request.image_public_id
     )
+    
+    if not video_url.startswith("https://"):
+        
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid video URL."
+        )
+
+    if not image_url.startswith("https://"):
+    
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image URL."
+        )
+    
 
     credits_required = calculate_character_replace_credits(
         duration
