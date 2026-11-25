@@ -783,6 +783,133 @@ def auth_google(data: GoogleLoginRequest):
             connection.close()
 
 
+@app.post("/auth/link-google")
+def link_google(
+    data: GoogleLoginRequest,
+    current_user: dict = Depends(get_authenticated_user)
+):
+    connection = None
+
+    try:
+        client_id = os.getenv("GOOGLE_CLIENT_ID")
+
+        if not client_id:
+            raise HTTPException(500, "Google login is not configured.")
+
+        google_user = id_token.verify_oauth2_token(
+            data.credential,
+            google_requests.Request(),
+            client_id
+        )
+
+        email = google_user.get("email", "").strip().lower()
+        google_sub = google_user.get("sub")
+
+        if (
+            not email
+            or not google_sub
+            or not google_user.get("email_verified")
+        ):
+            raise HTTPException(401, "Google verification failed.")
+
+        connection = psycopg2.connect(os.getenv("DATABASE_URL"))
+        cursor = connection.cursor()
+
+        # Lock the authenticated user's account.
+        cursor.execute("""
+            SELECT email, google_sub
+            FROM app_users
+            WHERE user_id = %s
+            FOR UPDATE;
+        """, (current_user["user_id"],))
+
+        user = cursor.fetchone()
+
+        if not user:
+            raise HTTPException(404, "Thomas AI account not found.")
+
+        existing_email, existing_google_sub = user
+
+        if existing_google_sub == google_sub:
+            connection.rollback()
+            return {
+                "status": "success",
+                "message": "Google account is already linked."
+            }
+
+        if existing_google_sub:
+            raise HTTPException(
+                409,
+                "Another Google account is already linked."
+            )
+
+        # Never link a Google identity already owned by another account.
+        cursor.execute("""
+            SELECT user_id
+            FROM app_users
+            WHERE google_sub = %s
+            AND user_id != %s;
+        """, (google_sub, current_user["user_id"]))
+
+        if cursor.fetchone():
+            raise HTTPException(
+                409,
+                "This Google account belongs to another Thomas AI account."
+            )
+
+        # If the Thomas AI account already has an email,
+        # it must match the verified Google email.
+        if existing_email and existing_email.lower() != email:
+            raise HTTPException(
+                409,
+                "Google email does not match your Thomas AI account email."
+            )
+
+        cursor.execute("""
+            UPDATE app_users
+            SET google_sub = %s
+            WHERE user_id = %s;
+        """, (google_sub, current_user["user_id"]))
+
+        connection.commit()
+
+        cursor.close()
+
+        return {
+            "status": "success",
+            "message": "Google account linked successfully."
+        }
+
+    except HTTPException:
+        if connection:
+            connection.rollback()
+        raise
+
+    except ValueError:
+        if connection:
+            connection.rollback()
+        raise HTTPException(401, "Invalid Google identity token.")
+
+    except psycopg2.errors.UniqueViolation:
+        if connection:
+            connection.rollback()
+        raise HTTPException(
+            409,
+            "This Google account is already linked elsewhere."
+        )
+
+    except Exception as error:
+        if connection:
+            connection.rollback()
+
+        print("GOOGLE LINK ERROR:", repr(error), flush=True)
+        raise HTTPException(500, "Google account linking failed.")
+
+    finally:
+        if connection:
+            connection.close()
+
+
 @app.post("/auth/link-email")
 def link_email(
     data: EmailRegisterRequest,
