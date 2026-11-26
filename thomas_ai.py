@@ -2620,12 +2620,15 @@ def validate_character_video_duration(duration):
     if duration is None:
         raise ValueError("Video duration is unavailable.")
 
-    duration = float(duration)
+    try:
+        duration = float(duration)
+    except (TypeError, ValueError):
+        raise ValueError("Invalid video duration.")
 
-    if not math.isfinite(duration) or not 0 < duration <= 30:
+    if not math.isfinite(duration) or not 1 <= duration <= 30:
         raise HTTPException(
             status_code=400,
-            detail="Video duration must be greater than 0 and no longer than 30 seconds."
+            detail="Character replacement videos must be between 1 and 30 seconds."
         )
 
     return duration
