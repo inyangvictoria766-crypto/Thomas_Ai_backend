@@ -2754,17 +2754,19 @@ def character_replacement(
     credits_required = calculate_character_replace_credits(
         duration
     )
+    
+    if request.resolution != "480p":
+        raise HTTPException(
+            status_code=400,
+            detail="Only 480p resolution is currently supported."
+        )
 
     new_balance, reservation_id = reserve_credits(
         current_user["user_id"],
         credits_required,
         "character_replacement"
     )
-    if request.resolution != "480p":
-        raise HTTPException(
-            status_code=400,
-            detail="Only 480p resolution is currently supported."
-        )
+    
 
     # Pricing is not yet verified.
     from decimal import Decimal
