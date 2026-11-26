@@ -2753,6 +2753,11 @@ def character_replacement(
         credits_required,
         "character_replacement"
     )
+    if request.resolution != "480p":
+        raise HTTPException(
+            status_code=400,
+            detail="Only 480p resolution is currently supported."
+        )
 
     # Pricing is not yet verified.
     from decimal import Decimal
