@@ -2530,11 +2530,12 @@ class ImageRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=1000)
     quality: str = "low"
     
+
 class CharacterReplaceRequest(BaseModel):
     video_public_id: str = Field(min_length=1)
-    video_url: str
-    image_url: str
+    image_public_id: str = Field(min_length=1)
     resolution: str = "480p"
+    
 
 def submit_character_replacement(
     video_url,
