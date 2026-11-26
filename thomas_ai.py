@@ -2615,15 +2615,17 @@ def get_character_replacement_status(generation_id):
     return data
     
 def validate_character_video_duration(duration):
+    import math
+
     if duration is None:
         raise ValueError("Video duration is unavailable.")
 
     duration = float(duration)
 
-    if not 5 <= duration <= 30:
+    if not math.isfinite(duration) or not 0 < duration <= 30:
         raise HTTPException(
             status_code=400,
-            detail="Character replacement videos must be 5–30 seconds."
+            detail="Video duration must be greater than 0 and no longer than 30 seconds."
         )
 
     return duration
