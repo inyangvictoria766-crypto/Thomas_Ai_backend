@@ -3259,27 +3259,28 @@ def generate_image(
             detail="Invalid image quality."
         )
 
+    
+    
     # 1. RESERVE CUSTOMER CREDITS
     expected_credits = {
-    "low": 1,
-    "medium": 2,
-    "high": 12
-}[quality]
+        "low": 1,
+        "medium": 2,
+        "high": 12
+    }[quality]
 
-if request.confirmed_credits != expected_credits:
-    raise HTTPException(
-        status_code=409,
-        detail="Credit confirmation required."
+    if request.confirmed_credits != expected_credits:
+        raise HTTPException(
+            status_code=409,
+            detail="Credit confirmation required."
+        )
+
+    credits_used = expected_credits
+
+    new_balance, reservation_id = reserve_credits(
+        current_user["user_id"],
+        credits_used,
+        quality
     )
-
-credits_used = expected_credits
-
-new_balance, reservation_id = reserve_credits(
-    current_user["user_id"],
-    credits_used,
-    quality
-)
-
     # 2. SELECT PROVIDER
     if quality == "high":
         provider = "openai"
