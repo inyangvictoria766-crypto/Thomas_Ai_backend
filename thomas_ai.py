@@ -2672,7 +2672,49 @@ def get_cloudinary_image(public_id):
 
 
 
+@app.post("/character-replacement-check")
+def character_replacement_check(
+    request: CharacterReplaceRequest,
+    current_user: dict = Depends(get_authenticated_user)
+):
+    import requests
 
+    video_url, duration = get_cloudinary_video(
+        request.video_public_id
+    )
+
+    image_url = get_cloudinary_image(
+        request.image_public_id
+    )
+
+    results = {}
+
+    for name, url in [
+        ("video", video_url),
+        ("image", image_url)
+    ]:
+        try:
+            response = requests.get(
+                url,
+                headers={"Range": "bytes=0-0"},
+                stream=True,
+                timeout=20
+            )
+
+            results[name] = (
+                response.status_code in (200, 206)
+            )
+            response.close()
+
+        except Exception:
+            results[name] = False
+
+    return {
+        "video_accessible": results["video"],
+        "image_accessible": results["image"],
+        "duration": duration
+    }
+    
 @app.post("/character-replacement")
 def character_replacement(
     request: CharacterReplaceRequest,
