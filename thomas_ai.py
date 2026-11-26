@@ -4625,6 +4625,121 @@ async def upload_template_image(file: UploadFile = File(...)):
         await file.close()
 
 
+@app.post("/upload-character-image")
+async def upload_character_image(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_authenticated_user)
+):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload a valid character image."
+        )
+
+    try:
+        image_data = await file.read()
+
+        if not image_data:
+            raise HTTPException(
+                status_code=400,
+                detail="The image is empty."
+            )
+
+        if len(image_data) > 10 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail="Image must be 10 MB or smaller."
+            )
+
+        result = cloudinary.uploader.upload(
+            image_data,
+            folder="thomas_ai/character_replacement/images",
+            resource_type="image"
+        )
+
+        return {
+            "secure_url": result.get("secure_url"),
+            "public_id": result.get("public_id")
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "CHARACTER IMAGE UPLOAD ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not upload character image."
+        )
+
+    finally:
+        await file.close()
+        
+
+@app.post("/upload-character-video")
+async def upload_character_video(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_authenticated_user)
+):
+    if not file.content_type or not file.content_type.startswith("video/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload a valid video."
+        )
+
+    try:
+        video_data = await file.read()
+
+        if not video_data:
+            raise HTTPException(
+                status_code=400,
+                detail="The video is empty."
+            )
+
+        if len(video_data) > 100 * 1024 * 1024:
+            raise HTTPException(
+                status_code=413,
+                detail="Video must be 100 MB or smaller."
+            )
+
+        result = cloudinary.uploader.upload(
+            video_data,
+            folder="thomas_ai/character_replacement/videos",
+            resource_type="video"
+        )
+
+        return {
+            "secure_url": result.get("secure_url"),
+            "public_id": result.get("public_id"),
+            "duration": result.get("duration")
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(
+            "CHARACTER VIDEO UPLOAD ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not upload character video."
+        )
+
+    finally:
+        await file.close()
+        
+        
+
+
 @app.get("/higgsfield-auth-check")
 def higgsfield_auth_check():
     import os
