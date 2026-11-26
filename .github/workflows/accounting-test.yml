@@ -27,18 +27,20 @@ jobs:
 
       - name: Run generation endpoint tests
         run: python -m unittest -v test_generate_endpoint
+
       - name: Run provider settlement tests
         env:
           NEON_TEST_DATABASE_URL: ${{ secrets.NEON_TEST_DATABASE_URL }}
         run: python test_provider_settlement.py
+
       - name: Run refund tests
         env:
           NEON_TEST_DATABASE_URL: ${{ secrets.NEON_TEST_DATABASE_URL }}
         run: python test_refund.py
+
       - name: Run OpenAI cost tests
         run: python -m unittest -v test_openai_cost
-      - name: Run provider settlement tests
-        env:
-          NEON_TEST_DATABASE_URL: ${{ secrets.NEON_TEST_DATABASE_URL }}
-        run: python test_provider_settlement.py
+
+      - name: Run Character Replacement credit tests
+        run: python -m unittest -v test_character_replace_credits
         
