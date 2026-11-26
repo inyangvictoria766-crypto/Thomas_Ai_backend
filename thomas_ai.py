@@ -3260,13 +3260,25 @@ def generate_image(
         )
 
     # 1. RESERVE CUSTOMER CREDITS
-    credits_used = CREDIT_COSTS[quality]
+    expected_credits = {
+    "low": 1,
+    "medium": 2,
+    "high": 12
+}[quality]
 
-    new_balance, reservation_id = reserve_credits(
-        current_user["user_id"],
-        credits_used,
-        quality
+if request.confirmed_credits != expected_credits:
+    raise HTTPException(
+        status_code=409,
+        detail="Credit confirmation required."
     )
+
+credits_used = expected_credits
+
+new_balance, reservation_id = reserve_credits(
+    current_user["user_id"],
+    credits_used,
+    quality
+)
 
     # 2. SELECT PROVIDER
     if quality == "high":
