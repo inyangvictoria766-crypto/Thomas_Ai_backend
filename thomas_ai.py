@@ -97,6 +97,7 @@ PROVIDER_FUNDING_CONFIG = {
     }
     
 }
+
 def calculate_character_replace_credits(duration_seconds):
     from decimal import Decimal, ROUND_CEILING
 
@@ -119,12 +120,13 @@ def calculate_character_replace_credits(duration_seconds):
 
     api_cost_ngn = duration * Decimal("0.04") * rate
 
-    credits = api_cost_ngn / (Decimal("0.70") * Decimal("30"))
+    credits = api_cost_ngn / Decimal("20")
 
     return max(
         1,
         int(credits.to_integral_value(rounding=ROUND_CEILING))
     )
+    
 
 class CreditPurchaseRequest(BaseModel):
     package: str
