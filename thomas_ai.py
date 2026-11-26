@@ -102,27 +102,29 @@ def calculate_character_replace_credits(duration_seconds):
 
     duration = Decimal(str(duration_seconds))
 
-    if not duration.is_finite() or not Decimal("5") <= duration <= Decimal("30"):
-        raise ValueError("Video duration must be between 5 and 30 seconds.")
+    if not duration.is_finite() or not Decimal("1") <= duration <= Decimal("30"):
+        raise ValueError(
+            "Video duration must be between 1 and 30 seconds."
+        )
 
     rate = PROVIDER_FUNDING_CONFIG["usd_to_ngn_rate"]
 
     if rate is None:
         raise ValueError("USD to NGN exchange rate is not configured.")
 
-    api_cost_ngn = (
-        duration
-        * Decimal("0.04")
-        * Decimal(str(rate))
+    rate = Decimal(str(rate))
+
+    if not rate.is_finite() or rate <= 0:
+        raise ValueError("Invalid USD to NGN exchange rate.")
+
+    api_cost_ngn = duration * Decimal("0.04") * rate
+
+    credits = api_cost_ngn / (Decimal("0.70") * Decimal("30"))
+
+    return max(
+        1,
+        int(credits.to_integral_value(rounding=ROUND_CEILING))
     )
-
-    credits = (
-        api_cost_ngn
-        / (Decimal("0.70") * Decimal("30"))
-    )
-
-    return int(credits.to_integral_value(rounding=ROUND_CEILING))
-
 
 class CreditPurchaseRequest(BaseModel):
     package: str
