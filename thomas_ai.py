@@ -386,20 +386,24 @@ def settle_provider_budget(
                         "Existing usage transaction does not match."
                     )
 
-                cur.execute("""
-                    UPDATE provider_funding
-                    SET spent_amount_minor =
-                        spent_amount_minor + %s,
-                        updated_at = NOW()
-                    WHERE provider = %s
-                      AND currency = 'USD'
-                    RETURNING id
-                """, (actual_minor, provider))
+                
+                if provider != "cloudflare":
+                    
+                    cur.execute("""
+                        UPDATE provider_funding
+                        SET spent_amount_minor =
+                            spent_amount_minor + %s,
+                            updated_at = NOW()
+                        WHERE provider = %s
+                          AND currency = 'USD'
+                        RETURNING id
+                    """, (actual_minor, provider))
+                    
 
-                if not cur.fetchone():
-                    raise ValueError(
-                        "Provider funding record not found."
-                    )
+                    if not cur.fetchone():
+                        raise ValueError(
+                            "Provider funding record not found."
+                        )
 
                 cur.execute("""
                     UPDATE provider_cost_reservations
