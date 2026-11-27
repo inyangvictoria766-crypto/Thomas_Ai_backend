@@ -38,6 +38,7 @@ cloudinary.config(
     api_secret=os.getenv("CLOUDINARY_API_SECRET"),
     secure=True
 )
+#credits costs 
 CREDIT_COSTS = {
     "low": 1,
     "medium": 2,
