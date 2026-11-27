@@ -1556,26 +1556,27 @@ def record_generation(
                         )
 
                 else:
-                    # 8. Increase spending only for a NEW ledger entry.
-                    cursor.execute("""
-                        INSERT INTO provider_funding (
-                            provider,
-                            currency,
-                            funded_amount_minor,
-                            spent_amount_minor,
-                            low_balance_threshold_minor
-                        )
-                        VALUES (
-                            %s, 'USD', 0, %s, 100000000
-                        )
-                        ON CONFLICT (provider, currency)
-                        DO UPDATE SET
-                            spent_amount_minor =
-                                provider_funding.spent_amount_minor
-                                + EXCLUDED.spent_amount_minor,
-                            updated_at = NOW();
-                    """, (provider, cost_minor))
-
+                    if provider != "cloudflare":
+                        # 8. Increase spending only for a NEW ledger entry.
+                        cursor.execute("""
+                            INSERT INTO provider_funding (
+                                 provider,
+                                  currency,
+                                  funded_amount_minor,
+                                 spent_amount_minor,
+                                 low_balance_threshold_minor
+                              )
+                             VALUES (
+                                 %s, 'USD', 0, %s, 100000000
+                            )
+                             ON CONFLICT (provider, currency)
+                             DO UPDATE SET
+                                 spent_amount_minor =
+                                    provider_funding.spent_amount_minor
+                                     + EXCLUDED.spent_amount_minor,
+                                updated_at = NOW();
+                         """, (provider, cost_minor))
+                        
                 # 9. Settle the reservation.
                 cursor.execute("""
                     UPDATE provider_cost_reservations
