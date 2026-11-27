@@ -1,3 +1,4 @@
+
 import os
 import unittest
 from unittest.mock import patch, MagicMock
@@ -14,6 +15,7 @@ class GenerateEndpointTests(unittest.TestCase):
             "user_id": "test-user",
             "credits": 100
         }
+
         self.env_patch = patch.dict(os.environ, {
             "OPENAI_API_KEY": "test-openai-key",
             "CLOUDFLARE_API_TOKEN": "test-cloudflare-token",
@@ -23,7 +25,8 @@ class GenerateEndpointTests(unittest.TestCase):
 
         self.request = thomas_ai.ImageRequest(
             prompt="A futuristic city",
-            quality="high"
+            quality="high",
+            confirmed_credits=12
         )
 
         self.patches = [
@@ -91,6 +94,7 @@ class GenerateEndpointTests(unittest.TestCase):
     @patch.object(thomas_ai, "get_cloudflare_generation_cost")
     def test_cloudflare_success(self, mock_cost, mock_post):
         self.request.quality = "low"
+        self.request.confirmed_credits = 1
 
         response = MagicMock()
         response.json.return_value = {
@@ -168,4 +172,4 @@ class GenerateEndpointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
-      
+        
