@@ -256,17 +256,17 @@ def reserve_provider_budget(
 
                     # Actual Cloudflare usage today.
                     cur.execute("""
-                        SELECT COALESCE(
+                       SELECT COALESCE(
                             SUM(
-                                CEIL(
-                                    amount_minor::numeric / 1100
-                                )
-                            ),
+                                CEIL(amount_minor::numeric / 1100)
+                             ),
                             0
                         )::bigint
-                        FROM provider_transactions
-                        WHERE provider = 'cloudflare'
-                          AND transaction_type = 'usage'
+                         FROM business_ledger
+                         WHERE source = 'provider'
+                          AND entry_type = 'provider_usage'
+                          AND currency = 'USD'
+                          AND metadata->>'provider' = 'cloudflare'
                           AND created_at >= %s
                     """, (day_start,))
 
