@@ -16,15 +16,14 @@ class CharacterReplaceCreditTests(unittest.TestCase):
         )
 
     def test_duration_credit_calculation(self):
-        expected = {
-            1: 3,
-            5: 15,
-            10: 29,
-            17: 49,
-            25: 72,
-            30: 86
-        }
-
+    expected = {
+        1: 3,
+        5: 15,
+        10: 30,
+        17: 51,
+        25: 75,
+        30: 90
+    }
         for duration, credits in expected.items():
             with self.subTest(duration=duration):
                 self.assertEqual(
