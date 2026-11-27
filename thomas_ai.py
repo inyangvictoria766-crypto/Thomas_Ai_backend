@@ -286,14 +286,16 @@ def reserve_provider_budget(
                         WHERE r.provider = 'cloudflare'
                           AND r.status = 'reserved'
                           AND NOT EXISTS (
-                              SELECT 1
-                              FROM provider_transactions t
-                              WHERE t.provider = r.provider
-                                AND t.transaction_type = 'usage'
-                                AND t.source_reference =
-                                    r.reservation_id::text
-                          )
-                    """)
+                          
+                                 SELECT 1
+                                 FROM business_ledger b
+                                 WHERE b.source = 'provider'
+                                  AND b.entry_type = 'provider_usage'
+                                  AND b.currency = 'USD'
+                                  AND b.source_reference = r.reservation_id::text
+                                  AND b.metadata->>'provider' = 'cloudflare'
+)
+                              """)
 
                     pending_neurons = cur.fetchone()[0]
 
