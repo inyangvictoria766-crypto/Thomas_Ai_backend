@@ -151,12 +151,14 @@ security = HTTPBearer(auto_error=True)
 
 
 
+
 def reserve_provider_budget(
     provider,
     reservation_id,
     estimated_cost
 ):
-    from decimal import Decimal, ROUND_HALF_UP
+    from decimal import Decimal, ROUND_HALF_UP, ROUND_CEILING
+    from datetime import datetime, timezone
 
     allowed_providers = {
         "openai",
@@ -216,7 +218,9 @@ def reserve_provider_budget(
                 funding = cur.fetchone()
 
                 if not funding:
-                    raise ValueError("Provider funding record missing.")
+                    raise ValueError(
+                        "Provider funding record missing."
+                    )
 
                 funded, spent = funding
 
@@ -238,20 +242,96 @@ def reserve_provider_budget(
                         and existing_status == "reserved"
                     )
 
-                cur.execute("""
-                    SELECT COALESCE(
-                        SUM(estimated_cost_minor), 0
+                if provider == "cloudflare":
+
+                    day_start = datetime.now(
+                        timezone.utc
+                    ).replace(
+                        hour=0,
+                        minute=0,
+                        second=0,
+                        microsecond=0
                     )
-                    FROM provider_cost_reservations
-                    WHERE provider = %s
-                      AND status = 'reserved'
-                """, (provider,))
 
-                pending = cur.fetchone()[0]
-                available = funded - spent - pending
+                    # Actual Cloudflare usage today.
+                    cur.execute("""
+                        SELECT COALESCE(
+                            SUM(
+                                CEIL(
+                                    amount_minor::numeric / 1100
+                                )
+                            ),
+                            0
+                        )::bigint
+                        FROM provider_transactions
+                        WHERE provider = 'cloudflare'
+                          AND transaction_type = 'usage'
+                          AND created_at >= %s
+                    """, (day_start,))
 
-                if available < estimated_minor:
-                    return False
+                    used_neurons = cur.fetchone()[0]
+
+                    # Pending reservations without recorded usage.
+                    cur.execute("""
+                        SELECT COALESCE(
+                            SUM(
+                                CEIL(
+                                    r.estimated_cost_minor::numeric / 1100
+                                )
+                            ),
+                            0
+                        )::bigint
+                        FROM provider_cost_reservations r
+                        WHERE r.provider = 'cloudflare'
+                          AND r.status = 'reserved'
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM provider_transactions t
+                              WHERE t.provider = r.provider
+                                AND t.transaction_type = 'usage'
+                                AND t.source_reference =
+                                    r.reservation_id::text
+                          )
+                    """)
+
+                    pending_neurons = cur.fetchone()[0]
+
+                    estimated_neurons = int(
+                        (
+                            Decimal(estimated_minor)
+                            / Decimal("1100")
+                        ).quantize(
+                            Decimal("1"),
+                            rounding=ROUND_CEILING
+                        )
+                    )
+
+                    available_neurons = (
+                        10000
+                        - used_neurons
+                        - pending_neurons
+                    )
+
+                    if available_neurons < estimated_neurons:
+                        return False
+
+                else:
+
+                    cur.execute("""
+                        SELECT COALESCE(
+                            SUM(estimated_cost_minor), 0
+                        )
+                        FROM provider_cost_reservations
+                        WHERE provider = %s
+                          AND status = 'reserved'
+                    """, (provider,))
+
+                    pending = cur.fetchone()[0]
+
+                    available = funded - spent - pending
+
+                    if available < estimated_minor:
+                        return False
 
                 cur.execute("""
                     INSERT INTO provider_cost_reservations (
@@ -270,6 +350,10 @@ def reserve_provider_budget(
 
     finally:
         connection.close()
+
+
+
+
         
 
 
