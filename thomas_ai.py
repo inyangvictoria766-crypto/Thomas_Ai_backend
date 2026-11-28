@@ -329,6 +329,7 @@ def reserve_provider_budget(
                         )
                     )
 
+            
                     available_neurons = (
                         10000
                         - used_neurons
@@ -338,8 +339,28 @@ def reserve_provider_budget(
                     if available_neurons < estimated_neurons:
                         return False
 
-                else:
+                elif provider == "replicate":
+                    if REPLICATE_BILLING_MODE != "prepaid":
+                        return False
 
+                    cur.execute("""
+                        SELECT COALESCE(
+                            SUM(estimated_cost_minor), 0
+                        )
+                        FROM provider_cost_reservations
+                        WHERE provider = %s
+                          AND status = 'reserved'
+                    """, (provider,))
+
+                    pending = cur.fetchone()[0]
+
+                    available = funded - spent - pending
+
+                    if available < estimated_minor:
+                        return False
+
+                
+                else:
                     cur.execute("""
                         SELECT COALESCE(
                             SUM(estimated_cost_minor), 0
