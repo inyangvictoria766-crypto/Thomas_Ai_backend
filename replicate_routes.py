@@ -241,9 +241,12 @@ def replicate_generate(
                 "Cloudinary returned no image URL."
             )
 
-        # Record actual cost.
-        # The exact actual-cost calculation must be added
-        # using Replicate's verified billing data.
+        print(
+            
+            "REPLICATE METRICS:",
+            prediction.get("metrics"),
+            flush=True
+        )
         print(
             "REPLICATE PREDICTION:",
             prediction_id,
@@ -251,9 +254,9 @@ def replicate_generate(
         )
 
         print(
-            "REPLICATE OUTPUT STORED:",
+             "REPLICATE OUTPUT STORED:",
             permanent_url,
-            flush=True
+           flush=True
         )
 
         total_seconds = time.perf_counter() - started
