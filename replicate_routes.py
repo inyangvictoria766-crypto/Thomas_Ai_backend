@@ -353,4 +353,200 @@ def replicate_generate(
             status_code=502,
             detail="Replicate image generation failed."
     )
+        
+@app.post("/replicate/edit")
+async def replicate_edit(
+    prompt: str,
+    image_url: str,
+    quality: str,
+    current_user: dict = Depends(thomas_ai.get_authenticated_user)
+):
+    if quality not in REPLICATE_PRICES:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid quality."
+        )
+
+    if not prompt.strip() or len(prompt) > 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid editing prompt."
+        )
+
+    credits_required = {
+        "low": 1,
+        "medium": 4,
+        "high": 10
+    }[quality]
+
+    confirmed_credits = credits_required
+
+    if current_user["credits"] < confirmed_credits:
+        raise HTTPException(
+            status_code=402,
+            detail="Insufficient credits."
+        )
+
+    new_balance, reservation_id = thomas_ai.reserve_credits(
+        current_user["user_id"],
+        confirmed_credits,
+        quality
+    )
+
+    estimated_cost = (
+        REPLICATE_PRICES[quality]
+        * Decimal("1.10")
+    )
+
+    if not thomas_ai.reserve_provider_budget(
+        "replicate",
+        reservation_id,
+        estimated_cost
+    ):
+        thomas_ai.refund_credits(
+            current_user["user_id"],
+            reservation_id,
+            quality
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail="Replicate budget unavailable."
+        )
+
+    generation_succeeded = False
+
+    try:
+        headers = {
+            "Authorization": f"Bearer {os.getenv('REPLICATE_API_TOKEN')}",
+            "Content-Type": "application/json"
+        }
+
+        response = requests.post(
+            f"{REPLICATE_API_URL}/predictions",
+            headers=headers,
+            json={
+                "input": {
+                    "prompt": prompt,
+                    "input_images": [image_url],
+                    "quality": quality,
+                    "aspect_ratio": "match_input_image",
+                    "output_format": "png",
+                    "number_of_images": 1
+                }
+            },
+            timeout=60
+        )
+
+        response.raise_for_status()
+        prediction = response.json()
+
+        prediction_id = prediction["id"]
+
+        deadline = time.time() + 240
+
+        while time.time() < deadline:
+            result = requests.get(
+                f"{REPLICATE_API_URL}/predictions/{prediction_id}",
+                headers=headers,
+                timeout=30
+            )
+
+            result.raise_for_status()
+            prediction = result.json()
+
+            if prediction["status"] == "succeeded":
+                generation_succeeded = True
+                break
+
+            if prediction["status"] in ("failed", "canceled"):
+                raise RuntimeError(
+                    "Replicate editing failed."
+                )
+
+            time.sleep(2)
+
+        if not generation_succeeded:
+            raise TimeoutError(
+                "Replicate editing timed out."
+            )
+
+        output = prediction.get("output")
+
+        if isinstance(output, list):
+            image_url = output[0] if output else None
+        else:
+            image_url = output
+
+        if not image_url:
+            raise RuntimeError(
+                "Replicate returned no edited image."
+            )
+
+        image_response = requests.get(
+            image_url,
+            timeout=90
+        )
+
+        image_response.raise_for_status()
+
+        upload = thomas_ai.cloudinary.uploader.upload(
+            image_response.content,
+            folder="thomas_ai/edited",
+            resource_type="image"
+        )
+
+        permanent_url = upload.get("secure_url")
+
+        if not permanent_url:
+            raise RuntimeError(
+                "Cloudinary returned no image URL."
+            )
+
+        print(
+            "REPLICATE EDIT COMPLETED:",
+            prediction_id,
+            flush=True
+        )
+
+        return {
+            "image": permanent_url,
+            "provider": "replicate",
+            "model": REPLICATE_MODEL,
+            "quality": quality,
+            "credits_used": confirmed_credits,
+            "remaining_credits": new_balance,
+            "status": "success",
+            "accounting_status": "pending"
+        }
+
+    except Exception as error:
+        print(
+            "REPLICATE EDIT ERROR:",
+            repr(error),
+            flush=True
+        )
+
+        if not generation_succeeded:
+            try:
+                thomas_ai.release_provider_budget(
+                    reservation_id
+                )
+            except Exception as release_error:
+                print(
+                    "EDIT RELEASE ERROR:",
+                    repr(release_error),
+                    flush=True
+                )
+
+            thomas_ai.refund_credits(
+                current_user["user_id"],
+                reservation_id,
+                quality
+            )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Image editing failed."
+        )
     
