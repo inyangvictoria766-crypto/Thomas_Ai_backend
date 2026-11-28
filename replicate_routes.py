@@ -312,7 +312,7 @@ def replicate_generate(
         )
 
         total_seconds = time.perf_counter() - started
-
+        
         return {
             "image": permanent_url,
             "provider": "replicate",
@@ -322,8 +322,10 @@ def replicate_generate(
             "remaining_credits": new_balance,
             "status": "success",
             "generation_seconds": round(total_seconds, 2),
-            "accounting_status": "pending_cost_verification"
-        }
+            "accounting_status": (
+                "recorded" if accounting_recorded else "pending"
+            )
+         }
 
     except Exception as error:
         print(
