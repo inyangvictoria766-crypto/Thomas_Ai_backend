@@ -47,6 +47,25 @@ CREDIT_COSTS = {
 
 OPENAI_MAX_IMAGE_RESERVATION_USD = Decimal("0.15")
 
+REPLICATE_BILLING_MODE = os.getenv(
+    "REPLICATE_BILLING_MODE",
+    "prepaid"
+).lower()
+
+REPLICATE_SPENDING_LIMIT_USD = Decimal(
+    os.getenv(
+        "REPLICATE_SPENDING_LIMIT_USD",
+        "0"
+    )
+)
+
+REPLICATE_AUTO_RELOAD_ENABLED = (
+    os.getenv(
+        "REPLICATE_AUTO_RELOAD_ENABLED",
+        "false"
+    ).lower() == "true"
+)
+
 
 
 CREDIT_PACKAGES = {
