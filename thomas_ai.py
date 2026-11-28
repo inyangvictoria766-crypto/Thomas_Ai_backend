@@ -167,7 +167,8 @@ def reserve_provider_budget(
         "higgsfield",
         "luma",
         "provider_5",
-        "aimlapi"
+        "aimlapi",
+       "replicate"
     }
 
     if provider not in allowed_providers:
