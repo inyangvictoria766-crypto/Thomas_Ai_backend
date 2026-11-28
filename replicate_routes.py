@@ -290,15 +290,13 @@ def replicate_generate(
                 model_variant,
                 flush=True
             )
-            
-
 
         print(
-            
             "REPLICATE METRICS:",
             prediction.get("metrics"),
             flush=True
         )
+
         print(
             "REPLICATE PREDICTION:",
             prediction_id,
@@ -306,11 +304,10 @@ def replicate_generate(
         )
 
         print(
-             "REPLICATE OUTPUT STORED:",
+            "REPLICATE OUTPUT STORED:",
             permanent_url,
-           flush=True
+            flush=True
         )
-
         total_seconds = time.perf_counter() - started
         
         return {
