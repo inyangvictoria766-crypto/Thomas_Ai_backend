@@ -146,10 +146,11 @@ def replicate_generate(
     generation_succeeded = False
 
     try:
-    response = requests.post(
-        f"{REPLICATE_API_URL}/models/{REPLICATE_MODEL}/predictions",
-        headers=replicate_headers(),
-        json={
+        
+        response = requests.post(
+           f"{REPLICATE_API_URL}/models/{REPLICATE_MODEL}/predictions",
+           headers=replicate_headers(),
+           json={
             "input": {
                 "prompt": prompt,
                 "quality": quality,
