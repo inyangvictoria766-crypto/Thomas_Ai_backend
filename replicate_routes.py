@@ -200,22 +200,23 @@ def replicate_generate(
 
             time.sleep(2)
 
-        if not generation_succeeded:
-            raise RuntimeError(
-                "Replicate generation timed out."
-            )
-
         output = prediction.get("output")
+        image_url = None
 
         if isinstance(output, list):
-            image_url = output[0] if output else None
+            if output:
+                image_url = output[0]
+            output_count = len(output)
         else:
             image_url = output
+            output_count = 1 if output else 0
 
         if not image_url:
             raise RuntimeError(
                 "Replicate returned no image."
             )
+
+        
 
         # Download the temporary Replicate output.
         image_response = requests.get(
@@ -240,6 +241,56 @@ def replicate_generate(
             raise RuntimeError(
                 "Cloudinary returned no image URL."
             )
+    
+        
+        metrics = prediction.get("metrics") or {}
+
+        model_variant = (
+            metrics.get("model_variant") or quality
+        )
+
+        actual_output_count = (
+            metrics.get("image_output_count") or output_count
+        )
+
+        accounting_recorded = False
+
+        if model_variant in REPLICATE_PRICES:
+            provider_cost = (
+                REPLICATE_PRICES[model_variant]
+                * Decimal(str(actual_output_count))
+            )
+
+            try:
+                accounting_recorded = thomas_ai.record_generation(
+                    current_user["user_id"],
+                    quality,
+                    "replicate",
+                    reservation_id,
+                    REPLICATE_MODEL,
+                    provider_cost
+                )
+            except Exception as error:
+                print(
+                    "REPLICATE ACCOUNTING ERROR:",
+                    repr(error),
+                    flush=True
+                )
+
+            print(
+                "REPLICATE COST:",
+                str(provider_cost),
+                "USD",
+                flush=True
+            )
+        else:
+            print(
+                "UNKNOWN REPLICATE MODEL VARIANT:",
+                model_variant,
+                flush=True
+            )
+            
+
 
         print(
             
