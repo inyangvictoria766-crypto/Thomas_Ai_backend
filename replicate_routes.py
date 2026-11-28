@@ -146,19 +146,22 @@ def replicate_generate(
     generation_succeeded = False
 
     try:
-        response = requests.post(
-            f"{REPLICATE_API_URL}/models/{REPLICATE_MODEL}/predictions",
-            headers=replicate_headers(),
-            json={
-                "input": {
-                    "prompt": prompt,
-                    "quality": quality,
-                    "size": "1024x1024",
-                    "output_format": "png"
-                }
-            },
-            timeout=60
-        )
+    response = requests.post(
+        f"{REPLICATE_API_URL}/models/{REPLICATE_MODEL}/predictions",
+        headers=replicate_headers(),
+        json={
+            "input": {
+                "prompt": prompt,
+                "quality": quality,
+                "aspect_ratio": "1:1",
+                "output_format": "png",
+                "number_of_images": 1,
+                "moderation": "auto",
+                "background": "opaque"
+            }
+        },
+        timeout=60
+    )
 
         response.raise_for_status()
         prediction = response.json()
