@@ -43,4 +43,6 @@ jobs:
 
       - name: Run Character Replacement credit tests
         run: python -m unittest -v test_character_replace_credits
+      - name: Test Replicate integration
+        run: python test_replicate.py
         
